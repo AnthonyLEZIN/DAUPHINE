@@ -1,0 +1,445 @@
+---
+title: <center> Wine </center>
+author: "Anthony LEZIN"
+date: "8/19/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+```
+
+
+## I. Généralités et premières observations
+
+### A. Préparation des données
+
+#### 1. Chargement des données, renommage et observations
+
+\vspace{0,4cm}
+```{r}
+wine=read.table("https://archive.ics.uci.edu/ml/machine-learning-databases/wine/wine.data",sep=",")
+
+wine.names=c("Class","Alcohol","Malic acid","Ash","Alcalinity of ash","Magnesium","Total phenols","Flavanoids","Nonflavanoid phenols","Proanthocyanins","Color intensity","Hue","OD280/OD315 of diluted wines","Proline")
+
+wine.short=c("Class","Al","Mal.ac","Ash","Ash.Alc","Mg","Tot ph","Fl","Ph.Nonfl.","Proant","Col.int","Hue","OD","Prol.")
+
+names(wine)=wine.short
+attach(wine)
+```
+
+\vspace{0,2cm}
+\begin{center}
+Traduction française des données
+\end{center}
+
+\vspace{0,2cm}
+
+```{r}
+wine.names.fr=c("Classe","Alcool","Acide malique","Cendres","Alcalinité des cendres","Magnesium","Phénols totaux ","flavonoïdes","phénols non flavonoïdes","Proanthocyanidines","Intensité de la couleur","Teinte","OD280 / OD315 des vins dilués","Proline")
+
+#équivalences des noms
+equivalences = cbind(wine.names,wine.short,wine.names.fr)
+kable(data.frame(equivalences))
+rownames(equivalences)=c()
+colnames(equivalences)=c()
+```
+
+\newpage
+
+\begin{center}
+Normalisation des données
+\end{center}
+
+\vspace{0,2cm}
+
+```{r}
+# centrage et réduction
+wine.sc_num=data.frame(scale(wine[,-1]))
+wine.sc=cbind(as.factor(wine[,1]),wine.sc_num)
+colnames(wine.sc)[1]="Class"
+```
+
+
+\vspace{0,4cm}
+
+### B. Premières observations
+
+\vspace{0,2cm}
+Voici le corrélogramme et la matrice de corrélation 
+
+```{r,out.width="500px",warning=FALSE}
+library(corrplot)
+C = cor(wine.sc_num)
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+corrplot(C, method="color", col=col(200),type="upper")
+```
+
+\newpage
+
+```{r,out.width="500px",warning=FALSE}
+cor_mat=matrix(round(C,digits=2),nrow=13)
+row.names(cor_mat) =c("Al","Mal.ac","Ash","Ash.Alc","Mg","Tot ph","Fl","Ph.Nonfl.","Proant","Col.int","Hue","OD","Prol.")
+colnames(cor_mat) =row.names(cor_mat)
+kable(cor_mat)
+```
+\vspace{0,2cm}
+J'observe que :
+
+ * les **"Totals Phenols"** et les **"Flavanoids"** sont **extrêmement correlés** 
+ 
+ * les **"OD"** sont **très corrélés¨** avec **"Totals Phenols"** ainsi que les **"Flavanoids"**
+ 
+ * Il y a une **bonne corrélation** entre les variables **"Alcohol"** et **"Proline"** d'une part, les **"Proanthocyanins"** avec les **"Totals Phenols"** ainsi que les **"Flavanoids"** d'autre part.
+
+\newpage
+
+## II. Sélection du nombre de composantes
+\vspace{0,2cm}
+
+J'utilise le **critère de Kaiser** :   
+je ne retiens que les axes dont l’inertie est supérieure à l’inertie moyenne $I/p$. 
+
+\vspace{0,2cm}
+
+```{r,fig.width=9, fig.height=4.5}
+par(mfrow=c(1,2))
+# réalisation de l'ACP
+library('FactoMineR')
+res.pca = PCA(wine.sc_num,graph=FALSE)
+
+#valeurs propres et composantes
+kable(res.pca$eig)
+barplot(res.pca$eig[,1])
+
+#critère du coude
+plot(1:13,res.pca$eig[1:13],pch=1, type="o", xlab="n° de la valeur propre", ylab="valeur de la valeur propre")
+x.coude=c(1,4,14)
+y.coude=c(res.pca$eig[1],res.pca$eig[4],res.pca$eig[13])
+points(x.coude,y.coude, type="l",col="red",lty=2)
+```
+
+\vspace{0,2cm}
+En ACP normée, $I/p= 1$, je ne retiens donc que les axes associés à des valeurs propre supérieures à 1, c-à-d, les 3 premiers ici.
+
+On peut d'ailleurs vérifier ce résultat en utilisant le **critère du coude** :    
+sur l’eboulis des valeurs propres, j'observe un décrochement (coude) suivi d’une décroissance régulière à partir de la 4ème valeur propre. Je sélectionne les axes avant le décrochement, donc les 3 premiers.
+
+**La proportion d'inertie expliquée par les 3 premiers axes est de de 66.5 %**.
+Cela reste acceptable pour 14 variables.
+
+--> Je me restreins désormais à une ACP à 3 composantes.
+\vspace{0,2cm}
+```{r}
+res.pca = PCA(wine.sc_num,ncp=3,graph=FALSE)
+```
+
+\vspace{0,2cm}
+
+## III. Le plan factoriel principal
+
+\vspace{0,2cm}
+### A. Description des axes selon les individus
+\vspace{0,2cm}
+Ajoutons les moyennes (par classe) à la liste des individus.
+\vspace{0,2cm}
+```{r}
+wine.sc_moy=aggregate(wine.sc[, 2:14], list(wine.sc$Class), mean)
+names(wine.sc_moy)=names(wine.sc)
+wine.sc_moy2=rbind(wine.sc_moy,wine.sc)
+```
+
+\vspace{0,2cm}
+J'observe les individus obtenus par l'ACP en "séparant" les éléments selon leurs classes.
+\vspace{0,2cm}
+
+```{r,out.width="400px",warning=FALSE}
+res.pca = PCA(wine.sc,ncp=3,quali.sup=1,graph=FALSE)
+plot(res.pca,habillage=1,col.hab=c("blue","purple","red"),choix="ind")
+```
+
+\vspace{0,2cm}
+C'est quasi parfait !  
+Le 1er plan de l'ACP semble parfaitement **départager les individus** selon leur **classes**.
+
+\begin{center}
+Axe 1 
+\end{center}
+
+Le signe des éléments sur l'axe 1 **oppose** parfaitement les individus des **classes 1** et **3**. PLus précisémment :
+
+ * les individus de la classe 1 ont des coordonnées positives sur cet axe et sont donc positivement corrélés avec cet axe.
+ * les individus de la classe 3 ont des coordonnées négatives sur axe et sont donc négativement corrélés avec cet axe.
+ * les individus de la classe 2, eux, semblent équitablement répartis autour de 0 sur cet axe.
+ 
+Par ailleurs, les valeurs des individus sur cet axe semblent assez fidèlement départager les 3 classes, étant donné qu'à part quelques éléments atypiques par classe, on observe que :
+ 
+ * les individus de la classe 3 ont des valeurs appartenant à [-4.5;-2.5]
+ * les individus de la classe 2 ont des valeurs appartenant à [-2.5;2]
+ * les individus de la classe 1 ont des valeurs appartenant à [2;4.5] 
+
+\vspace{0,2cm}
+\begin{center}
+Axe 2 
+\end{center}
+\vspace{0,2cm}
+
+Le signe des éléments sur l'axe 2 **oppose** quasi parfaitement le groupe des individus des **classes 1 et 3** à celui des indovidus de la **classe 2**, plus précisémment :
+
+les individus de la classe 1 et 3 (respectivement de la classe 2) ont des coordonnées positives (respectivement négatives) sur cet axe et sont donc positivement (respectivement négativement) corrélés avec cet axe.
+
+<br>
+<center> <U> <h4> Individus bien représentés sur les axes par classe </U> </center>
+<br>
+
+Le graphique précédent semble montrer que certains individus suivants sont assez bien représentés par les axes.   
+Il s'agirait des individus 51, 23 pour la **classe 1**, 116, 17, 81 pour la **classe 2** et 137, 171 pour la **classe 3**.
+
+
+```{r}
+li_ind=c(51,23,116,17,81,137,171)
+A=NULL
+for (i in 1:length(li_ind)){
+  A=rbind(A,round(res.pca$ind$cos2[i,],digits=2))
+}
+rownames(A)=paste("individu", li_ind[1:7],sep=" ")
+kable(A)
+```
+
+
+L'ensemble de ces points semblent convenablement représenter leurs axes, mais j'estime que la contribution sur les autres axes est encore trop importante.
+
+Je décide procéder autrement en créant une fonction qui détermine les points possédant une contribution significative sur les axes sélectionnés et non significative sur les autres.  
+Ainsi, dans l'exemple ci-dessous : au moins 70 % pour l'axe  représenté par le point et moins de 7% pour les autres axes.
+
+
+```{r}
+# Recherche de points représentatifs des axes
+pts_car=function(j,a,b,c){
+li=c(1,2,3,1,2)
+A=NULL
+  for (i in 1:178){
+    if (round(res.pca$ind$cos2[i,],digits=2)[li[j]]>= 0.7 && round(res.pca$ind$cos2[i,],digits=2)[li[j+1]]<=0.07 &&   round(res.pca$ind$cos2[i,],digits=2)[li[j+2]]<=0.07)
+      {A=cbind(A,c(i,round(res.pca$ind$cos2[i,],digits=2)))
+      }
+  }
+  #t(A)
+return(t(A))
+}
+
+# Points à fore contribution sur l'axe 1
+kable(pts_car(1,0.7,0.07,0.07))
+
+# Points à fore contribution sur l'axe 2
+kable(pts_car(2,0.07,0.7,0.7))
+
+# Points à fore contribution sur l'axe 3
+kable(pts_car(3,0.07,0.07,0.7))
+```
+
+
+J'étudierai ces points ultérieurement après avoir émis une hypothèse sur les variables caractérisant les axes principaux sélectionnés par l'ACP.
+
+Pour achever l'étude de ce graphique, je relève le fait que certains individus semblent atypiques. Il s'agit des indidividus "159" (pour la classe 3), "81, 116, 122, 74" (pour la classe 2) et "4, 19 et 15" à la rigueur (pour la classe 1).
+
+\newpage
+### B. Description des axes selon les variables
+
+\vspace{0,2cm}
+\begin{center}
+1. Le plan principal
+\end{center}
+\vspace{0,2cm}
+
+```{r}
+plot(res.pca,choix="varcor")
+```
+
+Je vais désormais analyser le nuage des variables.  
+sur le cercle des corrélations, les principes de lecture sont les suivants :
+
+------------------------------------------------------------------------------------
+
+ * <I>plus une variable possède une qualité de représentation élevée dans l’ACP, plus sa flèche est longue;
+ * plus deux variables sont corrélées, plus leurs flèches pointent dans la même direction (dans le cercle de corrélation, le coefficient de corrélation est symbolisé par les angles géométriques entre les flèches);
+ * plus une variable est proche d’un axe principal de l’ACP, plus elle est liée à lui</I>. 
+ 
+------------------------------------------------------------------------
+
+<center> <U> <h4> Axe 1 </U> </center>
+<br>
+
+L'axe 1 semble opposer 2 groupes de variables : 
+
+ * **"Flavanoids", "Total.phenols", "OD 280.OD 315.of.diluted.wines"** et dans une moindre mesure **"Photocyanins"** et **"Hue"**
+ * **"Nonflavanoid.phenols"** et peut-être **"Malic Acid"** ainsi que **"Ash Alcanity"**
+  
+Pour toutes ces variables, la contribution sur l'axe 1 est assez important (tous les "|cos|" sont supérieurs à $0.5$) contrairement à celle sur l'axe 2 qui semble peu élevée.
+
+Le 1er groupe est positivement corrélé avec l'axe 1 contrairement au 2nd groupe.  
+Cela indique que les individus faisant partie du 1er groupe possèdent des valeurs des variables au-dessus de la moyenne.
+
+C'est le cas de **tous les individus** de la **classe 1**.
+
+C'est le **phénomène contraire** pour ceux de la **classe 3** puisque l'ensemble des individus est négativement corrélé à cet axe.
+Ainsi, tous les individus faisant partie du 2nd groupe possèdent des valeurs de variables de ce groupe en-dessous de la moyenne.
+
+C'est le cas de tous les individus  de la **classe 3**.
+
+\vspace{0,2cm}
+\begin{center}
+Axe 2
+\end{center}
+\vspace{0,2cm}
+
+l'axe 2 est positivement avec le groupe des variables **"Color.intensity"**, **"Alcohol"**,**"Ash"** et dans une moindre mesure **"Magnesium"**.
+Néanmoins, les 2 dernières variables ont une contribution peu élevée sur cet axe.
+
+Il semblerait que la quasi totatlité des individus de le **classe 2** possèdent des valeurs de variables de ce groupe <U>en-dessous de la moyenne.
+
+\vspace{0,2cm}
+\underline{Rq !}
+\vspace{0,2cm}
+`
+Les axes 1 et 2 étant décorrélés par construction, il en de même pour les variables bien représentées par ces axes (par ex. **"Flavanoids"** pour l'axe 1 et **"Color Intensity"** pour l'axe 2).  
+Mêmes causes et mêmes effets avec les **"Flavanoids"** qui est totalement décorrélé du 2nd axe et donc de **"Ash"**.
+
+On peut vérifier ces faits ici :
+
+
+```{r}
+c(cor(wine.sc$Fl,wine.sc$Col.int),cor(wine.sc$Fl,wine.sc$Ash))
+```
+
+Les coefficients sont relativement proches de 0.
+
+\vspace{0,2cm}
+\begin{center}
+2. Les plans secondaires
+\end{center}
+\vspace{0,2cm}
+
+\vspace{0,2cm}
+\begin{center}
+plan contenant les composantes 1 et 3 
+\end{center}
+\vspace{0,2cm}
+
+
+```{r}
+plot(res.pca,choix="varcor",axes=c(1,3))
+```
+
+\vspace{0,2cm}
+L'axe 1 oppose toujours le groupe contenant les variables
+"Flavanoids","Total.phenols","OD 280.OD 315.of.diluted.wines" et dans une moindre mesure "Photocyanins" et "Hue" avec le groupe contenant les variables  "Nonflavanoid.phenols" et dans une moindre mesure "Malic.acid".
+
+
+L'axe 3, lui, semble être caractérisé par 2 variables :
+
+* "Ash" (dont la contribution semble bien plus importante que sur l'axe 2 dans l'étude du premier plan factoriel)
+* "Alacanity.of.ash"
+
+Ces variables sont positivement correllés avec l'axe. Il est par ailleurs intéressant de noter que cet axe contient peu d'informations sur les autres variables.
+
+\vspace{0,2cm}
+\begin{center}
+plan contenant les composantes 2 et 3 
+\end{center}
+\vspace{0,2cm}
+
+```{r}
+plot(res.pca,choix="varcor",axes=c(2,3))
+```
+
+\vspace{0,2cm}
+Les principales variables influant dans l'axe 2 possèdent une corrélation positive avec cet axe.  
+Ce sont : **"Color.intensity", "Alcohol","Proline"** (dans une moindre mesure). **"Magnesium"** et **"Hue"** semblent désormais apporter une contribution plus faible.
+
+L'axe 3, lui, semble toujours être caractérisé par 2 variables :
+
+* **"Ash"** (dont la contribution semble plus importante que sur l'axe 2)
+* **"Alacanity.of.ash"** (quasiment "colinéaire" à l'axe)
+
+Ces variables sont positivement corrélés avec l'axe. Ce dernier contient toujours très peu d'informations sur les autres variables.
+
+
+## IV. Interprétation des résultats
+\vspace{0,2cm}
+Les variables étant centrées. Le signe et les valeurs des points typiques fournissent des éléments facilitant l'interprétation des axes.
+
+\vspace{0,2cm}
+
+```{r}
+# points typiques de la 1ère composante :
+#pts_car(1,0.7,0.07,0.07)
+wine_sc_dig2_1=round(wine.sc[c(pts_car(1,0.7,0.07,0.07)[,1]),-1],digits = 2)
+tab1=cbind(wine.sc[c(pts_car(1,0.7,0.07,0.07)[,1]),1],wine_sc_dig2_1)
+colnames(tab1)=wine.short
+kable(tab1)
+
+# points typiques de la 2nde composante :
+#pts_car(2,0.07,0.7,0.07)
+wine_sc_dig2_2=round(wine.sc[c(pts_car(2,0.07,0.7,0.07)[,1]),-1],digits = 2)
+tab2=cbind(wine.sc[c(pts_car(2,0.07,0.7,0.07)[,1]),1],wine_sc_dig2_2)
+colnames(tab2)=wine.short
+kable(tab2)
+
+# points typiques de la 3ème composante :
+#pts_car(3,0.07,0.07,0.7)
+wine_sc_dig2_3=round(wine.sc[c(pts_car(3,0.07,0.07,0.7)[,1]),-1],digits = 2)
+tab3=cbind(wine.sc[c(pts_car(3,0.07,0.07,0.7)[,1]),1],wine_sc_dig2_3)
+colnames(tab3)=wine.short
+kable(tab3)
+```
+
+\vspace{0,2cm}
+bien qu'identifié comme "bon représentant" de l'axe 3, l'élément 122 n'est pas représentatif de la classe 2, car au vu du graohiques des individus, il s'avère atypique pour cette classe.
+
+
+Les observations confirment nos précédentes hypothèses : "la classe d'un vin dépend de la composition chimique qui le compose".
+
+Ainsi : 
+
+-------------------------------------------------------------------------------------
+
+ * l'axe 1 oppose les vins des classes 1 et 3
+ * l'axe 2 précise la nature des vins des classe 2
+ * l'axe 3 caractérise les vins extrêmement riches en "Ash" et "Ash Alcanity"
+
+-------------------------------------------------------------------------------------
+
+De manière plus précise, on a les caractérisations suivantes :
+
+ * les vins de **classe 1** sont **très riches** en **"Flavanoids"** et en **"OD280/OD315 of diluted wines"**.  
+ Ils sont **assez riches** en **"Total phenols"** (l'individu 161 semble atypique), **"Proanthocyanins", "Hue"** et **"Proline"**.    
+Par ailleurs ils s'avèrent **assez pauvres** en **"Malic acid"** et **"Nonflavanoid. phenols"**.
+
+ * c'est exactement **le contraire** pour ceux de la **classe 3**.
+
+ * les vins de classe 2 sont **pauvres** en **"Ash" et "Magnesium"**. Ils ont en général une **"Color Intensity"** ainsi qu'un degré **"d'Alcohol"** plus faible que la moyenne.
+ 
+\vspace{0,2cm}
+\begin{center}
+Récapitulatif
+\end{center}
+\vspace{0,2cm}
+
+
+   $élements \ chimiques$ |$classe\ 1$|$classe\ 2$|$classe\ 3$
+------------|-----------|-----------|--------- 
+**Flavanoids**|très riche | |très pauvre 
+**OD280/OD315**|très riche | |très pauvre 
+**Total phenols**|riche| |très pauvre 
+**Proanthocyanins**|riche | 	|très pauvre 
+**Hue**	|riche| 	|très pauvre 
+**Proline**	|riche|  |très pauvre 
+**Ash**	|             |pauvre | |
+**Alcalinity of ash**	||pauvre	|	|
+**Magnesium**	| |pauvre	| 	|
+**Color Intensity**	| |pauvre		| |
+**Alcohol**	|	|pauvre	| |
+
