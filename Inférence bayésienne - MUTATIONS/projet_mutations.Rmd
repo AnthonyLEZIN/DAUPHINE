@@ -1,0 +1,842 @@
+---
+title: "Mutations"
+author: "Anthony LEZIN"
+date: "8/19/2020"
+output:
+  pdf_document:
+      latex_engine: xelatex
+  html_document: default
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(tidyverse)
+library(MASS)
+library(MCMCpack)
+library(BMS)
+```
+
+# I. Régression linéaire
+\vspace{0,2cm}
+
+## 0. Préparation des données
+\vspace{0,2cm}
+
+
+```{r}
+mut=read.csv("/Users/anthonylezin/Desktop/projets_stat/Projet_Inf. baysienne/mutations2.csv",header=TRUE,sep=",")
+```
+
+Je décide de renommer les variables pour certaines applications ultérieures.
+
+\vspace{0,2cm}
+
+```{r}
+nom=c("1","vil","3","4","Mat","Barre","ef_l","ef_es","ef_s","tbrl","tbres","tbrs","tral","traes","tras","ef_2","ef_1","tab2b","taa2b","tab1b","taa1b","tbrts","trats")
+
+#équivalences entre anciens noms et nouveaux noms
+equivalences = cbind(names(mut),(nom))
+rownames(equivalences)=c()
+```
+
+\vspace{0,2cm}
+
+voici le tableau des équivalences pour les noms des variables :
+
+```{r,warning=FALSE}
+kable(equivalences)
+```
+
+## 1. Régression linaire baysienne et interprétation des coefficients
+\vspace{0,2cm}
+
+```{r}
+mut2=mut[,6:23]
+names(mut2)=nom[6:23]
+```
+
+\vspace{0,2cm}
+
+On simule 10 000 itérations de la loi à postériori par la méthode de Monte-Carlo associées aux chaîne de Markov (MCMC). Par cette méthode, j'obtiens une matrice de dimension (10 000,19) dontla colonne $i$ fournit une estimation de la loi à postériori de la $i^{ème}$ covariable.  
+
+\vspace{0,2cm}
+```{r,message =FALSE}
+reg0=MCMCregress(Barre~., data=mut2)
+summary(reg0)
+```
+\vspace{0,2cm}
+
+Dans le 1er tableau :  
+
+ * la 1ère colonne fournit une estimation du vecteur $\widehat{\beta}$ contenant les valeurs $\widehat{\beta}_i$, estimteur des covaraiables obtenus dans la MCMC. Ils sont calculés à partir de la moyenne des estimations.  
+ * la 2nde colonne fournit une estimation de l'erreur, les écart-type des lois à postériori.  
+ * un 2nd tableau fournit les quantiles de la loi à postériori de chacun des paramètres. En effet, l'inférence baysienne permet d'estimer bien plus que des paramètres ponctuels. On obtient une estimation de la densité de la loi à postériori, ce qui permet d'estimer des paramètres de cette loi, des intervalles de confiance, etc.
+
+"Naïvement", $0$ appartient à tous les intervalles de crédibilité (sauf peut-être "taux_reussite_attendu_serie_l") traduisant indirectement le fait que l'on ne peut pas ôter de manière significative des covariables de notre modèle.
+
+Ce critère n'est pas réellement adapté à la sélection de modèles. 
+
+\vspace{0,2cm}
+
+```{r}
+reg0.bms=bms(Barre~., data=mut2, burn = 1e4, iter=1e5)
+```
+\vspace{0,2cm}
+
+Après avoir "brulé" les premières itérations et augmenté un peu le nombre, l'indice $Corr PMP$ avoisinne la valeur $1$. Les probabilités d'inclusion et celles données par l'algorithme MCMC sont donc relativement proches. Il n'est pas nécessaire d'augmenter encore le nombre d'itérations de la chaine.
+
+Malheureusement, les proportions des itérations de l'algorithme MCMC passées par les différents modèles (représentées par les probabilités contenues colonne PIP) sont relativement faibles !
+Etant donné qu'elles représentent les probabilités d'inclure les covariables en question dans le modèle, il semble qu'il sera délicat de déterminer une "sélection utile".
+
+Par exemple, la covaiable "taux d'accès attendu en 1ère bac" est la plus "visitée" par la chaine. Elle apparaît dans moins de 16% de l'ensemble des modèles visités.
+
+```{r}
+image(reg0.bms)
+kable(topmodels.bma(reg0.bms)[,1:7])
+kable(topmodels.bma(reg0.bms)[,8:14])
+```
+
+Le modèle le plus probable est celui qui ne contient aucune covariable, et ce, dans 39% des cas !  
+Les 12 premiers modèles proposés ne contiennent qu'une seule covariable! Difficile de choisir...  
+Sans conviction et bien qu'il n'apparaisse que dans 0.4% des cas, je choisis le 1er modèle qui contient plus d'une covariable.
+\vspace{0,2cm}
+```{r,message =FALSE}
+reg1=MCMCregress(Barre~tral+taa1b , data=mut2)
+summary(reg1)
+```
+
+\newpage
+Examinons la trace et le graphique des densités marginales à postériori.
+
+\vspace{0,2cm}
+```{r,fig.width=9, fig.height=9}
+plot(reg1)
+```
+
+Il ne semble y avoir aucune structure particulière dans le graph. des traces. Ces dernières semblent "osciller convenablement", signe que l'algorithme fonctionne normalement en "allant chercher des points de la densité à postériori ni trop près, ni trop loin".
+
+\vspace{0,2cm}
+
+
+```{r}
+raftery.diag(reg1)
+```
+\vspace{0,2cm}
+
+C'est quasi-pafait ! 
+Il aurait fallu entre 3740 et 3850 itérations pour faire fonctionner convenablement l'algorithlme de MCMC, ce qui est bien inférieur au 10 000 générées précédemment.  
+Il n' y a quasiment aucun "temps de chauffe" (Burn-in = 2), 
+Il ne me semble pas nécessaire de modifier la point de départ, la taille des pas ("tune"), et donc le Burn-IN pour l'instant.
+
+Obeservons l'autocorrélation potentielle afin de vérifier si la chaine de markov "oublie rapidement son passé".
+
+\vspace{0,2cm}
+```{r,fig.width=9, fig.height=9}
+effectiveSize(reg1)
+```
+\newpage
+```{r,fig.width=9, fig.height=9}
+acf(reg1)
+```
+\vspace{0,2cm}
+
+En résumé, l'algortihme MCMC converge, la sélection BMS fonctionne, mais la qualité du modèle proposé est pauvre.  
+Je décide de ne pas poursuivre plus en détail l'étude de ce modèle.
+
+\newpage
+
+## 2. Analyse fréquentiste/baysienne
+
+\vspace{0,2cm}
+```{r}
+reg_freq=lm(Barre~., data=mut2)
+summary(reg_freq)
+```
+\vspace{0,2cm}
+
+En l'état, il n'y a pas grand chose de significatif et le "Adjusted R-squared" ($R_{adj}^2 = 0.007931$) est tout simplement catastrophique...  
+
+\vspace{0,2cm}
+
+Etudions d'éventuelles corrélations dans les variable susceptible de minimiser la qualité de l'estimation de $\widehat{\beta}$ due à un mauvais coditionnement de la matrice à inverser.
+
+J'utilise la fonction *symnum* (le package "corrplot" semble en travaux aujourd'hui...).
+
+\newpage
+
+```{r}
+C2 = cor(mut2)
+symnum(C2,symbols = c(" ", ".", "*", "**", "***", "****"),abbr.colnames = F)
+```
+
+
+\vspace{0,2cm}
+Ici, on voit clairement des groupes de variables corrélées, voire fortement corrélées.
+Cela a pour conséquence d'induire du bruit.
+Je tente de sélectionner une covariable pour chaque groupe de variables "assez corrélées" et faiblement corrélé avec les autres.
+
+\vspace{0,2cm}
+```{r}
+reg_freq2=lm(Barre~ ef_s+ef_2+ taa1b, data=mut2)
+summary(reg_freq2)
+AIC(reg_freq2)
+```
+\vspace{0,2cm}
+
+Il n'y a rien de probant. Voyons ce que fournit une sélection automatique.
+\vspace{0,2cm}
+```{r}
+modselect_f=stepAIC(reg_freq,~., data=mut2,trace=F,direction=c("both"))
+summary(modselect_f)
+AIC(modselect_f)
+```
+\vspace{0,2cm}
+Il reste peu de covariables. Cela risque de ne pas être concluant.
+\vspace{0,2cm}
+```{r,fig.width=9, fig.height=9}
+par(mfrow=c(2,2))
+plot(modselect_f)
+```
+\vspace{0,2cm}
+
+C'est franchement mauvais :
+
+* les résidus semblent structurés et assez mal disséminés autour des régressions locales (graph.1 et 3) qui, de fait, ne sont pas "horizontales"  
+* le QQ-plot traduit une "non-gaussianité" manifeste  
+* enfin, ce modèles induit un nombres conséquents de "points atypiques" avec des distances de Cook élevées.
+
+Bref, le modèle gaussien semble totalement inadapté ici.
+
+\newpage
+
+### Essai d'une ACP
+
+\vspace{0,2cm}
+```{r,fig.width=9, fig.height=9}
+par(mfrow=c(1,2))
+# réalisation de l'ACP
+library('FactoMineR')
+mut2.sc=scale(mut2)
+res.pca = PCA(mut2.sc,graph=FALSE)
+```
+
+```{r,fig.width=4, fig.height=4}
+#valeurs propres et composantes
+kable(res.pca$eig)
+barplot(res.pca$eig[,1])
+```
+\vspace{0,2cm}
+
+```{r}
+par(mfrow=c(1,3))
+plot(res.pca,choix="varcor",axes=c(1,2))
+plot(res.pca,choix="varcor",axes=c(1,3))
+plot(res.pca,choix="varcor",axes=c(2,3))
+```
+\vspace{0,5cm}
+
+Il y a des groupement de variables intéressantes.  
+Les 3 premiers axes concentrent 80% de la variance totale. Ils sont assez représentatifs pour effectuer une étude.  
+Je pourrai tenter de grouper les variables (selon ces 3 axes), expliquer les axes, regarder ce qu'ils opposent (selon les varaiables et les "individus extrêmes"), puis effectuer une régression PLS (par exemple), mais je vais m'en passer dans ce projet.
+
+\newpage
+
+## 3. Maths et Anglais
+\vspace{0,2cm}
+Reprenons l'étude précédente en ciblant sur les 2 disciplines.
+
+```{r}
+mut_mat=mut[(mut$Matiere=="MATHS"),]
+mut_ang=mut[(mut$Matiere=="ANGLAIS"),]
+# restrictions aux varaiables quantitatives
+mut_mat2=mut_mat[,6:23]
+mut_ang2=mut_ang[,6:23]
+```
+\vspace{0,2cm}
+
+### 3.1 Maths
+\vspace{0,2cm}
+
+##### regression linéaire
+\vspace{0,2cm}
+```{r}
+reg_mat2.0=lm(mut_mat2$Barre~., data=mut_mat2)
+summary(reg_mat2.0)
+```
+
+\newpage
+
+```{r}
+# sélection automatique
+reg_mat2.1=stepAIC(reg_mat2.0,~., data=mut_mat2,trace=F,direction=c("backward"))
+summary(reg_mat2.1)
+AIC(reg_mat2.1)
+```
+
+\vspace{0,2cm}
+Sans être extraordinaire, le $R^2_{adj}$ et AIC s'améliorent un peu en sélectionnant quelques covariables. 
+
+\vspace{0,2cm}
+```{r,fig.width=9, fig.height=9}
+par(mfrow=c(2,2))
+plot(reg_mat2.1)
+```
+
+\vspace{0,2cm}
+
+C'est un peu mieux que précédemment. Le QQ-plot demeure non probant. les résidus sont plutôt bien répartis ,mais les régressions locales "se tordent un peu" et semblent s'éloigner de la direction horizontale idéale.  
+Enfin, les distances de Cook semblent acceptables sans être extraordinaires.
+
+
+
+\newpage
+##### Algorithme MCMC
+\vspace{0,2cm}
+On simule 10 000 itérations de la loi à postériori par la méthode de Monte-Carlo associées aux chaîne de Markov (MCMC).
+
+\vspace{0,2cm}
+```{r,message =FALSE}
+reg0.mat=MCMCregress(Barre~., data=mut_mat2)
+summary(reg0.mat)
+```
+
+\newpage
+```{r}
+reg0.mat.bms=bms(Barre~., data=mut_mat2, burn = 1e4, iter=1e5)
+```
+
+
+```{r}
+image(reg0.mat.bms)
+topmodels.bma(reg0.mat.bms)[,1:8]
+topmodels.bma(reg0.mat.bms)[,9:16]
+```
+\vspace{0,2cm}
+
+Le modèle le plus probable est celui qui ne contient aucune covariable !! Cela n'annonce rien de bon..  
+Je sélectionne le modèle non vide le plus probable. En l'occurence, celui contenant une seule covariable "taux_brut_de_reussite_serie_es".
+
+```{r}
+reg0.mat.select=MCMCregress(Barre~taux_brut_de_reussite_serie_es, data=mut_mat2)
+```
+\vspace{0,2cm}
+
+
+```{r}
+summary(reg0.mat.select)
+plot(reg0.mat.select)
+```
+\vspace{0,2cm}
+Il ne semble y avoir aucune structure particulière dans le graph. des traces. Ces dernières semblent "osciller convenablement", signe que l'algorithme fonctionne normalement en "allant chercher des points de la densité à postériori ni trop près, ni trop loin".
+
+\vspace{0,2cm}
+```{r}
+effectiveSize(reg0.mat.select)
+raftery.diag(reg0.mat.select)
+```
+\vspace{0,2cm}
+Il n'y a pas de souci pour le «taux de change» entre les échantillons provenant de la MCMC et des échantillons indépendants.
+\vspace{0,2cm}
+```{r}
+ acf(reg0.mat.select)
+```
+
+\vspace{0,2cm}
+Les graphiques de convergence de la MCMC indiquent que l'algorithme a convergé. Ceux d'autocorrelation des résidus sont assez bons. La chaîne oublie très rapidement son passé.
+Néanmoins le modèle, lui, reste inadapté.
+\newpage
+
+### 3.2 Anglais
+
+\vspace{0,2cm}
+
+##### regression linéaire
+\vspace{0,2cm}
+
+```{r}
+reg_ang2.0=lm(mut_ang2$Barre~., data=mut_ang2)
+summary(reg_ang2.0)
+```
+
+\newpage
+
+```{r}
+# sélection automatique
+reg_ang2.1=stepAIC(reg_ang2.0,~., data=mut_ang2,trace=F,direction=c("backward"))
+summary(reg_ang2.1)
+AIC(reg_ang2.1)
+```
+
+\vspace{0,2cm}
+le $R^2_{adj}$ possède toujours une valeur relativement faible...
+
+\newpage
+```{r,fig.width=9, fig.height=9}
+par(mfrow=c(2,2))
+plot(reg_ang2.1)
+```
+
+\vspace{0,2cm}
+
+2 outliers perturbent totalement les graphs de gregression. Il s'agit des individus 201 et 478.  Le QQ-plot n'est pas si mauvais si on enlève valeurs ces valeurs extrêmes. Bien qu'ils soient plutôt bien répartis, ils semblent avoir une "tendance" remettant en cause l'hypothèse d'indépendance des résidus.
+
+\newpage
+
+Que se passe-t-il en enlevant ces individus extrêmes ?
+
+\vspace{0,2cm}
+```{r}
+mut_ang.bis=mut[-c(201,478),]
+mut_ang.bis=mut_ang.bis[(mut_ang.bis$Matiere=="ANGLAIS"),]
+# restrictions aux varaiables quantitatives
+mut_ang2.bis=mut_ang.bis[,6:23]
+```
+\vspace{0,2cm}
+
+```{r,message =FALSE}
+reg_ang2.2.select=stepAIC(lm(mut_ang2.bis$Barre~., data=mut_ang2.bis)
+                          ,~., data=mut_ang2.bis,trace=F,direction=c("backward"))
+summary(reg_ang2.2.select)
+AIC(reg_ang2.2.select)
+```
+
+```{r,fig.width=9, fig.height=9}
+par(mfrow=c(2,2))
+plot(reg_ang2.2.select)
+```
+\vspace{0,2cm}
+
+Les graphs sont un peu meilleurs d'une manière générale. Le QQ-plot devient plus qu'acceptable.La répartition des résidus se fait plutôt bien de part et d'autres des régressions locales.  
+
+Néanmoins la faible valeur du $R^2_{adj}$ m'enclint a délaisser ce modèle.
+\newpage
+
+##### Pour le fun..
+
+\vspace{0,2cm}
+
+Après avoir ôté du modèle quelques covariables trop corrélées, j'obtiens les modèles suivants :
+\vspace{0,2cm}
+```{r,fig.width=9, fig.height=9}
+par(mfrow=c(2,2))
+# avec sélection de quelques covariables trop correlés aux autres
+reg_ang2.1=lm(mut_ang2.bis$Barre~. -1-(taux_brut_de_reussite_serie_s +effectif_presents_serie_l +taux_reussite_attendu_total_series), data=mut_ang2.bis)
+
+# sélection automatique
+reg_ang2.2=stepAIC(reg_ang2.1,~., data=mut_ang2.bis,trace=F,direction=c("backward"))
+summary(reg_ang2.2)
+plot(reg_ang2.2)
+```
+
+\vspace{0,2cm}
+En sélectionnant quelques covariables, le $R^2_{adj}$ s'améliore grandement.
+Il est peut-être plus facile de trouver un modèle linéaire pour cette discipline que dans le cadre "pluridisciplinaire"
+
+Néanmoins, en étudiant les graphiques, 
+les résidus sont plutôt bien répartis et les distances de Cook semblent acceptables.
+C'est cette fois-ci la gaussianité des résidus qui pose problème. Le QQ-plott n'est pas bon. Dommage....
+
+\newpage
+
+##### Algorithme MCMC
+
+\vspace{0,2cm}
+```{r,message =FALSE}
+reg0.ang=MCMCregress(Barre~., data=mut_ang2.bis)
+summary(reg0.ang)
+```
+
+\vspace{0,2cm}
+
+```{r}
+reg0.ang.bms=bms(Barre~., data=mut_ang2.bis, burn = 1e4, iter=1e5)
+```
+\vspace{0,2cm}
+
+
+```{r}
+image(reg0.mat.bms)
+```
+\newpage
+
+```{r}
+topmodels.bma(reg0.ang.bms)[,1:8]
+```
+\newpage
+
+```{r}
+topmodels.bma(reg0.ang.bms)[,9:16]
+```
+\vspace{0,2cm}
+Je sélectionne le modèle non vide le plus probable. En l'occurence, celui contenant une seule covariable "taux_brut_de_reussite_serie_es".
+
+```{r}
+reg0.ang.select=MCMCregress(Barre~taux_brut_de_reussite_serie_es, data=mut_ang2.bis)
+```
+
+\vspace{0,2cm}
+```{r}
+raftery.diag(reg0.ang.select)
+```
+
+Il aurait fallu environ 3800 itérations pour faire fonctionner convenablement l'algorithlme de MCMC, ce qui est bien inférieur au 10 000 générées précédemment.  
+Il n' y a quasiment aucun "temps de chauffe" (Burn-in = 2), 
+
+
+Obeservons l'autocorrélation potentielle afin de vérifier si la chaine de markov "oublie rapidement son passé".
+\vspace{0,2cm}
+
+```{r,fig.width=9, fig.height=9}
+effectiveSize(reg0.ang.select)
+acf(reg0.ang.select)
+```
+\vspace{0,2cm}
+
+Il n'y a pas de souci pour le «taux de change» entre les échantillons provenant de la MCMC et des échantillons indépendants.
+Les graphiques de convergence de la MCMC indiquent que l'algorithme a convergé. Ceux d'autocorrelation des résidus sont assez bons. La chaîne oublie très rapidement son passé.
+Néanmoins le modèle, lui, reste inadapté.
+\newpage
+
+### 3.3 "Maths==Anglais" ?
+
+\vspace{0,2cm}
+
+l’hypotèse que les covariables agissent de la même manière dans les deux disciplines semble improbable au vu des résultats précédents. Tentons de le vérifier.
+
+\vspace{0,2cm}
+
+```{r,fig.width=9, fig.height=4.5}
+par(mfrow=c(1, 2))
+r=reg0.mat.select/reg0.ang.select
+mean(r)
+quantile(r, c(0.025,0.975))
+length(r)
+plot(1:30000,cumsum(r)/(1:30000),type="l", ylim=c(-0.5,2.5))
+abline(h=1,col="red")
+plot(1:100000,cumsum(r)/(1:100000),type="l", ylim=c(-0.5,2.5))
+abline(h=1,col="red")
+```
+
+\vspace{0,2cm}
+
+La moyenne de $r$ s'éloigne de la valeur $1$ à mesure que $n$ grandit. L'hypothèse selon laquelle la covariable sélectionnée agit de la même manière sur les différentes matières semble déraisonnable.
+
+\newpage
+
+# II - Loi de Pareto
+\vspace{0,2cm}
+## 4. Choix du package
+\vspace{0,2cm}
+J'utilise le package $actuar$. La fonction de densité de probabilité de la loi de Pareto de paramètres $\alpha$ et $m$ est $f_Z(z;m,\alpha)=\alpha\dfrac{m^{\alpha}}{z^{\alpha+1}}$.
+
+On choisit ici $m=21$ (nombre de points minimums de la barre d'admission)
+
+\vspace{0,2cm}
+```{r, warning=FALSE,message=FALSE}
+library(actuar)
+alpha_legend=c("0.020","0.050","0.1","0.2","0.3","0.5","0.8","1")
+alpha=as.numeric(alpha_legend)
+x = 21:2100
+y = dpareto1(x, alpha[1], 21)
+
+plot(x, y,xlim=c(15,2100),ylim=c(0,0.002) ,xlab="nombre de points", ylab="densité",
+      main = "Différentes lois de Pareto", type="l")
+for (i in 1:8){
+  lines(x, dpareto1(x, alpha[i], 21) , col = i)
+}
+legend("topright", paste("alpha = ",alpha_legend,sep=""), col=1:8, lty=1,cex=0.70,bg="#f3f3f3")
+```
+\newpage
+
+## 5. Choix de la loi à priori de alpha
+
+\vspace{0,2cm}
+
+### Une 1ère approche
+
+\vspace{0,2cm}
+Pour déterminer $\alpha$, je commence par visualiser les données.
+\vspace{0,2cm}
+```{r,fig.width=9, fig.height=4.5}
+par(mfrow=c(1,2))
+summary(mut$Barre)
+plot(mut$Barre,,xlab="nombre de points", ylab="valeur des points",main = "barre d'admissibilité" )
+hist(mut$Barre,freq = FALSE, breaks=20,xlab="valeur des points", ylab="densité",
+     main = "barre d'admissibilité",col=("#f3f3f3"))
+points(450,0.000565,col="red",lty=1)
+```
+\vspace{0,2cm}
+
+Une majorité des points semble être contenue dans l'intervalle $[21 \,;\,500]$.  
+En regardant l'histogramme, on pourrait essayer de déterminer une distribution de Pareto dont la courbe passant par le point marqué en rouge.
+
+### Avec une régression non paramétrique
+
+\vspace{0,2cm}
+
+Je cherche une loi à priori de la forme d'une densité de Pareto. L'idée serait de se rapprocher de la courbe obtenue par régression non paramétrique (en pointillés sur le graph. ci-dessous).  
+
+\vspace{0,2cm}
+```{r,warning=FALSE}
+library("kdensity")
+hist(mut$Barre,freq = FALSE, breaks = 30,xlab="valeur des points", ylab="densité",
+     main = "Recherche d'une loi de Pareto adaptée",col=("#f3f3f3"))
+kde=kdensity(mut$Barre,,1.5,kernel = "gaussian",support = c(21,2056))
+lines(kde, xlim=c(195,2100), col=9, lty=4)
+val_param_legend=c("0.1","0.2","0.3","0.4","0.6","1")
+val_param=as.numeric(val_param_legend)
+for (i in 1:6){
+  curve(dpareto1(x, val_param[i],21), col = i+1, lty = 1, xlim=c(21,2100), add = TRUE)
+}
+legend("topright", c(paste("alpha = ",val_param_legend,sep=""),"reg. non param."), col=c(2:7,1), lty=c(rep(1,6),4),bg=("#f3f3f3"),cex=0.70)
+```
+
+
+\vspace{0,2cm}
+
+Des valeurs de $\alpha$ trop petites (inférieures à $0,20$) ou trop grandes (supérieures à $1$) semblent inadaptées.   $\alpha\in\,[0.20 \,;\,0.6]$ (à postériori) semble convenir.
+
+### Un essai "heuristique"
+
+\vspace{0,2cm}
+
+Je décide de procéder autrement. Je choisis de "restreindre" la covariable $barre$ à sa moyenne et cherche à maximiser la fonction $\alpha \rightarrow\dfrac{\alpha m^{\alpha}}{\bar{x}_{barre}^{\alpha+1}}$ (où $\bar{x}$ est la moyenne des $x_i$) afin de me faire une idée sur "un choix raisonnable de loi à priori" et sur un ordre de grandeur dans lequel $\alpha$ évolue.
+
+J'obtiens la représentation suivante :
+
+\vspace{0,2cm}
+
+```{r,fig.width=9, fig.height=4.5}
+par(mfrow=c(1,2))
+alph=(1:2000)/1000
+g=alph*21^alph/mean(mut$Barre)^(alph+1)
+plot(alph,g, type="l",xlab="alpha", ylab="g(alpha)" )
+plot( function(x) dgamma(x,shape=1,rate=.3),0 , 30, xlab="x", ylab="y",
+main="Fig. 1. diverses densités Gamma.",col="blue");
+curve( dgamma(x,shape=2,rate=.3), add=TRUE, col="red");
+curve( dgamma(x,shape=2,rate=.5), add=TRUE, col="green4");
+curve( dgamma(x,shape=8,rate=.6), add=TRUE, col="orange")
+legend( x="topright", y=NULL, text.col= c("blue","red","green4","orange"), legend=
+c("alpha=1, beta=0,3","alpha=2, beta=0,3","alpha=2, beta=0,6","alpha=8, beta=0,6"),bg=("#f3f3f3"))
+```
+\vspace{0,2cm}
+
+En réduisant les données à leur moyenne, la courbe décrivant $g$ ressemble à une loi $gamma$ dont le maximum serait obtenu en $\alpha\approx 0.366$. Cela pourrait tendre à confirmer que :
+
+ * le choix d'une loi $\Gamma$ semble indiqué pour une prior de $\alpha$
+ * l'idée que la loi à postériori doit accorder des valeurs plus fréquentes pour $\alpha\in\,[0.20 \,;\,0.60]$ à postériori reste cohérente
+
+Sans plus d'informations et pour ne pas biaiser l'exercice (cf. questions suivantes), une "prior" suivant une loi $\Gamma(1, 1)$ semble convenable.
+
+\newpage
+
+## 6. Détermination de la loi à postériori de alpha
+
+\vspace{0,2cm}
+
+On sait que $\pi(\alpha/X)\;\Theta \;\pi(\alpha)\times L(X_1,...,X_n/\alpha)$ (où $\Theta$ indique une "relation de proportionnalité").
+
+ * D'une part, la vraissemblance $L$ s'écrit sous la forme :  
+ $\forall x_i\geq m$, $L(X_1,...,X_n/\alpha)=\prod\limits_{i=1}^{i=n}\alpha\dfrac{m^{\alpha}}{x_i^{\alpha+1}}=\alpha^n\dfrac{m^{n\alpha}}{\left(\prod\limits_{i=1}^{i=n}x_i\right) ^{\alpha+1}}=\alpha^n\dfrac{m^{n\alpha }\left(\prod\limits_{i=1}^{i=n}x_i\right)^{-\alpha}}{\left(\prod\limits_{i=1}^{i=n}x_i\right)}$  
+ * D'autre part, $\alpha$ suit une loi du type $\Gamma(a,b)$, donc $\pi(\alpha)$ peut s'écrire sous la forme :  
+ $\pi(\alpha)=\dfrac{b^a}{\Gamma(a)}e^{-b\alpha}\alpha^{a-1}\mathbf{1_{\{z\geq m\}}}$.
+
+Dans ce cas, $\pi(\alpha/X)\,\;\Theta\,\;\dfrac{b^a}{\Gamma(a)}e^{-b\alpha}\alpha^{a-1}\alpha^n\dfrac{m^{n\alpha }\left(\prod\limits_{i=1}^{i=n}x_i\right)^{-\alpha}}{\left(\prod\limits_{i=1}^{i=n}x_i\right)}$,  d'où $\pi(\alpha/X) \;\;\Theta \;\; e^{-b\alpha}\alpha^{a-1}\alpha^n m^{n\alpha }\left(\prod\limits_{i=1}^{i=n}x_i\right)^{-\alpha}$  
+soit : $\pi(\alpha/X) \,\;\Theta \,\; \alpha^{n+a-1}e^{-\alpha\left(b+\sum\limits_{i=1}^{i=n}ln(x_i)-nln(m)\right)}$.
+
+Ainsi, la loi à postériori est une loi $\Gamma \left(a+n,b+\sum\limits_{i=1}^{i=n}ln(x_i)-nln(m)\right)$.
+
+**Les lois sont conjuguées !**
+
+Cela s'avère relativement pratique pour tirer un échantillon de la loi à postériori et éviter un MCMC (par exemple).
+
+\vspace{0,2cm}
+```{r}
+n=length(mut$Barre)
+c(1+n,1+sum(log(mut$Barre))-n*log(21))
+```
+\vspace{0,2cm}
+
+--> Ma loi à postériori pour $\alpha$ est donc la loi $\Gamma(517,1147.141)$
+
+\newpage
+
+## 7. Echantillon et Intervalle de crédibilité
+
+```{r}
+# Un échantillon
+ech=rgamma(1000,1+n,1+sum(log(mut$Barre))-n*log(21))
+
+# un intervalle de crédibilité associé à cet échantillon
+cred.echan=c(sort(ech)[2.5/100*1000],sort(ech)[97.5/100*1000])
+cred.echan
+mean(cred.echan)
+# un intervalle de crédibilité associé à ma loi à postériori
+cred=qgamma(c(.025, .975), 1+n, 1+sum(log(mut$Barre))-n*log(21))
+cred
+mean(cred)
+```
+
+\vspace{0,2cm}
+Les intervalles sont relativement proches. C'est rassurant...
+\vspace{0,2cm}
+
+### Et en vrai ? (maximum de vraisemblance)
+
+\vspace{0,2cm}
+La vraissemblance des $X_i$ s'écrit 
+$L(m,\alpha,z_1,...,z_n)=\dfrac{\left(\alpha m^{\alpha}\right)^n}{\prod\limits_{i=1}^{n}(z_i)^{\alpha+1}}\mathbf{1_{\{z\geq m\}}}$
+
+Après passage par la log-vraissemblance, annulation de sa dérivée partielle et vérification de la nature de l'extrema, le maximum de vraissemblance est défini par $\widehat{\alpha}_{m,v}=\dfrac{n}{\sum\limits_{i=1}^{n}ln(x_i)-ln(m)}$.
+
+\vspace{0,2cm}
+```{r}
+alpha=length(mut$Barre)/sum(log(mut$Barre)-log(21))
+alpha
+```
+
+\vspace{0,2cm}
+Le maximum de vraissemblance vaut $\widehat{\alpha}_{m,v}\displaystyle \approx 0.4502$. Il aurait donc pu être intéressant de choisir des paramètres $a,b$ de la loi à priori en connaissance de ce que l'on devait obtenir au sens fréquentiste pour les paramètres de la loi à postériori, mais cela "corrompt un peu" l'esprit de l'exercice.
+
+Par ailleurs, je constate que malgré un échantillon de taille relativement peu élevé ($"516"$), le peu d'information récolté à travers l'étude graphique pour déterminer un eloi à priori raisonnable a permis une approximation assez fine de $\alpha$.
+
+\newpage
+
+## 8. "alpha_maths = alpha_anglais" ?
+
+\vspace{0,2cm}
+
+```{r,fig.width=9, fig.height=4.5}
+par(mfrow=c(1,2))
+hist(mut_mat$Barre,freq = FALSE, breaks=30,xlab="valeur des points(maths)", ylab="densité",
+     main = "barre d'admissibilité" ,col=("#f3f3f3"))
+hist(mut_ang$Barre,freq = FALSE, breaks=30,xlab="valeur des points(anglais)", ylab="densité",
+     main = "barre d'admissibilité",col=("#f3f3f3") )
+```
+
+\vspace{0,2cm}
+
+En conservant comme prior une loi gamma(1,1) et une loi de Pareto pour les données de chacunes des matières, on obtient une loi à postériori du type gamma de paramètres suivants :
+
+\vspace{0,2cm}
+```{r}
+n_mat=length(mut_mat2$Barre)
+c(1+n_mat,1+sum(log(mut_mat2$Barre))-n_mat*log(21))
+```
+\vspace{0,2cm}
+
+```{r}
+# Un échantillon
+ech_mat=rgamma(1000,1+n_mat,1+sum(log(mut_mat$Barre))-n_mat*log(21))
+
+# un intervalle de crédibilité associé à cet échantillon
+cred.echan_mat=c(sort(ech_mat)[2.5/100*1000],sort(ech_mat)[97.5/100*1000])
+cred.echan_mat
+mean(cred.echan_mat)
+sd(cred.echan_mat)
+
+# un intervalle de crédibilité associé à ma loi à postériori
+cred_mat=qgamma(c(.025, .975),1+n_mat,1+sum(log(mut_mat2$Barre))-n_mat*log(21))
+cred_mat
+
+# paramètres
+mean(cred_mat)
+sd(cred_mat)
+
+ech_mat2=rgamma(10000,1+n_mat,1+sum(log(mut_mat$Barre))-n_mat*log(21))
+cred.echan_mat2=c(sort(ech_mat2)[2.5/100*10000],sort(ech_mat2)[97.5/100*10000])
+cred.echan_mat2
+mean(cred.echan_mat2)
+```
+
+\vspace{0,2cm}
+Bref, on obtient une valeur de $\alpha_{maths}$ autour de $0.51$.
+
+### Et pour l'anglais 
+
+\vspace{0,2cm}
+```{r}
+n_ang=length(mut_ang2$Barre)
+c(1+n_ang,1+sum(log(mut_ang2$Barre))-n_ang*log(21))
+```
+
+\vspace{0,2cm}
+```{r}
+# Un échantillon
+ech_ang=rgamma(10000,1+n_ang,1+sum(log(mut_ang$Barre))-n_ang*log(21))
+
+# un intervalle de crédibilité associé à cet échantillon
+cred.echan_ang=c(sort(ech_ang)[2.5/100*10000],sort(ech_ang)[97.5/100*10000])
+cred.echan_ang
+mean(cred.echan_ang)
+sd(cred.echan_ang)
+
+# un intervalle de crédibilité associé à ma loi à postériori
+cred_ang=qgamma(c(.025, .975),1+n_ang,1+sum(log(mut_ang2$Barre))-n_ang*log(21))
+cred_ang
+mean(cred_ang)
+sd(cred_ang)
+
+ech_ang2=rgamma(10000,1+n_ang,1+sum(log(mut_ang$Barre))-n_ang*log(21))
+cred.echan_ang2=c(sort(ech_ang2)[2.5/100*10000],sort(ech_ang2)[97.5/100*10000])
+cred.echan_ang2
+mean(cred.echan_ang2)
+```
+
+\vspace{0,2cm}
+On obtient une valeur de $\alpha_{anglais}$ autour de $0.497$. L'hypothèse d'égalité des paramètres ne semble pas déraisonnable.
+\vspace{0,2cm}
+
+```{r}
+boxplot(ech_mat,ech_ang,names=c("Maths","Anglais"),col=c("cyan","pink"),main="Valeurs de alpha par discipline",horizontal=F)
+
+```
+
+\vspace{0,2cm}
+Les échantillons tirés sont très proches. Testons si l'égalité $\alpha_{Maths}=\alpha_{Anglais}$ est plausible en étudiant le rapport $r=\dfrac{\alpha_{Maths}}{\alpha_{Anglais}}$.
+
+\vspace{0,2cm}
+```{r}
+par(mfrow=c(1, 1))
+niter = 10000
+r.post = ech_mat/ ech_ang
+summary(r.post)
+hist(r.post, breaks=50)
+quantile(r.post, c(0.025, 0.975))
+plot(1:10000,cumsum(r.post)/(1:10000),type="l")
+abline(h=1,col="red")
+```
+
+\newpage
+
+L'hypothèse selon laquelle "les 2 valeurs de $\alpha$ sont les mêmes" est extrêmement plausible au vu de l'histogramme. Le graphique de $r$ ne tend pas précisément vers 1 (il n'y a aucune raison pour ce soit exactement 1), mais l'hypothèse est toit à fait réaliste au vu des analyses.
+
+Je la valide.
+
+\vspace{0,2cm}
+### Et en vrai ? (maximum de vraisemblance)
+
+\vspace{0,2cm}
+La vraissemblance des $X_i$ s'écrit 
+$L(m,\alpha,z_1,...,z_n)=\dfrac{\left(\alpha m^{\alpha}\right)^n}{\prod\limits_{i=1}^{n}(z_i)^{\alpha+1}}\mathbf{1_{\{z\geq m\}}}$
+
+Après passage par la log-vraissemblance, annulation de sa dérivée partielle et vérification de la nature de l'extrema, le maximum de vraissemblance est défini par $\widehat{\alpha}_{m,v}=\dfrac{n}{\sum\limits_{i=1}^{n}ln(x_i)-ln(m)}$.
+
+\vspace{0,2cm}
+```{r}
+alpha_mat=length(mut_mat2$Barre)/sum(log(mut_mat2$Barre)-log(21))
+alpha_mat
+(cred_mat[1]+cred_mat[2])/2
+
+alpha_ang=length(mut_ang2$Barre)/sum(log(mut_ang2$Barre)-log(21))
+alpha_ang
+(cred_ang[1]+cred_ang[2])/2
+```
+
+\vspace{0,2cm}
+
+Les résultats obtenus par maximum de vraissemblance (et donc par l'approche fréquentiste) tendent à confirmer les résultats précédemment obtenus. L'hypothèse $\alpha_{Maths}=\alpha_{Anglais}$ est plausible.
+
+
+
