@@ -1,0 +1,675 @@
+---
+title: "Projet ML - Clustering"
+author: "Anthony LEZIN"
+date: "4/19/2021"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# I - Généralités et préparation des données
+\vspace{0,2cm}
+```{r,echo=FALSE, message =F, warning = F}
+library(knitr)
+library(tidyverse)
+library(MASS)
+library(ROCR)
+library(here)
+library(caret)
+library(readr)
+library(ggplot2)
+library(RColorBrewer)
+library(dendextend)
+library(GGally)
+library(cluster)
+library(mclust)
+library(here)
+```
+\vspace{0,2cm}
+
+Commençons par charger les données
+
+\vspace{0,2cm}
+
+```{r}
+# Chargement groupé
+
+files_names <- list.files(path=here("./Clustering/project-5-files"))
+
+nb_files <- length(files_names)
+data_names <- vector("list",length=nb_files)
+data_names <- strsplit(files_names, split=".csv")
+
+for (i in 1:nb_files) {
+      assign(data_names[[i]],
+                read.csv(paste(here("./Clustering/project-5-files", files_names[i])))
+     )}
+```
+
+\vspace{0,2cm}
+
+Le but de l'analyse exploratoire est de caractériser les départements français du point de vue de leur composition en population générale et en population active. L'analyse doit être mise en oeuvre en deux étapes.
+
+**La première étape** devrait consister à créer deux ensembles de données agrégées au niveau du département.
+Dans ces ensembles de données, chaque département métropolitain français doit être décrit par des statistiques résumant la composition de la population.   
+Par exemple, on pourrait décrire un département par le pourcentage de ses habitants féminins, son nombre d'habitants, la répartition des diplômes des habitants, des salaires, etc. Il est recommandé de n'inclure des variables numériques que dans les descriptions pour faciliter l'analyse . Le premier ensemble de données doit correspondre aux départements tels que caractérisés par leur population générale, tandis que dans le second ensemble de données, les départements doivent être décrits en utilisant la population active. Le rapport doit contenir une description des statistiques utilisées pour représenter les départements.
+
+**Dans un deuxième temps**, les deux ensembles de données doivent être analysés à l'aide d'algorithmes de clustering et de visualisation.  
+Le but de l'analyse est d'évaluer si les départements français sont homogènes en termes de composition de la population ou, au contraire, séparés en différents groupes.
+Vous pouvez utiliser n'importe quel algorithme de clustering vu pendant le cours, puis évaluer la composition du cluster et le positionnement relatif en utilisant une cartographie linéaire et / ou non linéaire, des tests statistiques basés sur une analyse de variance, etc. très important. Finalement, vous pouvez envisager d'illustrer si les clusters résultants sont spatialement corrélés, à l'aide d'une cartographie géographique.
+
+\vspace{0,2cm}
+
+\vspace{0,2cm}
+```{r,message =F}
+# Jointure de city
+city=city_loc %>%
+    left_join(city_adm) %>%
+    left_join(city_pop) %>% 
+    left_join(departments) %>% 
+    relocate(Nom.de.la.commune, Dep,Nom.du.département, REG,inhabitants)%>%
+    relocate(insee_code,TOWN_TYPE, .after = Long)
+head(city)
+```
+
+\vspace{0,2cm}
+
+-----------------------------------------------------------------------------------------------------------
+
+\vspace{0,2cm}
+
+1 -EDU1 -Pas de scolarité ou arrêt avant la fin du primaire  
+2 -EDU2 -Aucun diplôme et scolarité interrompue à la fin du primaire ou avant la fin du collège  
+3-EDU3 -Aucun diplôme et scolarité jusqu’à la fin du collège ou au-delà  
+4 - EDU11 -CEP (certificat d’études primaires)  
+5 - EDU12 - BEPC, brevet élémentaire, brevet des collèges, DNB  
+6 - EDU13 -CAP, BEP ou diplôme de niveau équivalent  
+7 - EDU14 - Baccalauréat général ou technologique, brevet supérieur, capacité en droit, DAEU, ESEU  
+8 - EDU15 - Baccalauréat professionnel, brevet professionnel, de technicien ou d’enseignement,   
+9 - EDU16 - BTS, DUT, Deug, Deust, diplôme de la santé ou du social de niveau bac+2, diplôme équivalent  
+10 -EDU17 - Licence, licence pro, maîtrise, diplôme équivalent de niveau bac+3 ou bac+4  
+11 - EDU18 - Master, DEA, DESS, diplôme grande école niveau bac+5, doctorat de santé  
+12 - EDU19 - Doctorat de recherche (hors santé)  
+
+
+\vspace{0,2cm}
+```{r, message=F}
+# Jointure de toutes les data "learn" afin de former un fichier "train" avec les données "city"
+train_cl=learn %>%
+      left_join(learn_job) %>%  
+      left_join(city)
+
+train_cl=mutate(train_cl,
+             edu=case_when
+              (train_cl$highest_degree=="EDU1"~"2.5",
+                train_cl$highest_degree=="EDU2"~"5",
+                train_cl$highest_degree=="EDU3"~"8",
+                train_cl$highest_degree=="EDU11"~"5.1",
+                train_cl$highest_degree=="EDU12"~"8.1",
+                train_cl$highest_degree=="EDU13"~"10.1",
+                train_cl$highest_degree=="EDU14"~"12.1",
+                train_cl$highest_degree=="EDU15"~"12.1",
+                train_cl$highest_degree=="EDU16"~"14.1",
+                train_cl$highest_degree=="EDU17"~"15.6",
+                train_cl$highest_degree=="EDU18"~"17.1",
+                train_cl$highest_degree=="EDU19"~"20.1"
+              )
+            ) %>% 
+      dplyr::select(Person_id, highest_degree,edu, SEX, insee_code, Dep, wage, inhabitants, X, Y)
+
+# Ajout de 0 pour la variable manquantes "wage"
+train_cl$wage[is.na(train_cl$wage)]<-0
+train_cl$edu=as.numeric(train_cl$edu)
+train_cl[10005:10009,]
+```
+
+\vspace{0,2cm}
+
+```{r, message=F}
+
+# levels(train_cl$highest_degree)
+# années_edu=c("2.5","5.1","8.1","10.1","12.1","12.1","14.1","15.6","17.1","20.1","5","8")
+
+# 
+# train_cl$edu=
+#   for (i in 1:nrow(train_cl)){
+#     if(train_cl$highest_degree==levels(train_cl$highest_degree)[i]){
+#       train_cl$edu=années_edu[i]
+#     }
+#   }
+# 
+#    for (i in 1:nrow(train_cl)){
+#     levels(train_cl$highest_degree)[i]
+#       train_cl$edu=années_edu[i]
+#     }
+
+```
+
+\vspace{0,2cm}
+
+
+```{r, message=F}
+# Une fonction regroupant les infomrations importante par département
+table_function=function(model){
+  salaire_moyen=model %>% group_by(Dep) %>% 
+    summarize(salaire_moyen=mean(wage))
+  
+  années_étude=model %>% group_by(Dep) %>% 
+    summarize(années_étude=mean(edu))
+
+  indiv_par_dep=model %>% group_by(Dep) %>% 
+  summarize(nb_individus=n())
+
+  Femmes_par_dep=model %>% group_by(Dep) %>% 
+    summarize(nb_femmes=sum(SEX=="Female")) 
+
+  infos_par_dep=model %>%
+    group_by(insee_code,Dep) %>% 
+    summarize(nb_villes=n(),nb_habitants=mean(inhabitants))%>% 
+    group_by(Dep) %>% 
+    summarize(nb_villes=n(),nb_habitants=sum(nb_habitants))
+
+  temp_model_cl=infos_par_dep %>% 
+    left_join(salaire_moyen) %>% 
+    left_join(indiv_par_dep) %>% 
+    left_join(Femmes_par_dep) %>% 
+    left_join(années_étude) %>% 
+    mutate(taux_femmes=100*nb_femmes/nb_individus) %>% 
+    dplyr::select(-nb_femmes) %>% 
+    relocate(Dep,nb_habitants,nb_individus,salaire_moyen,années_étude,taux_femmes)
+  
+return(temp_model_cl)
+}
+```
+
+\vspace{0,2cm}
+
+-----------------------------------------------------------------------------------------------------------
+
+```{r, message=F}
+# 
+# levels(train_cl$highest_degree)
+# années_edu=c("2.5","5.1","8.1","10.1","12.1","12.1","14.1","15.6","17.1","20.1","5","8")
+# 
+# train_cl$edu=case_when(
+#   for (i in length(années_edu)){
+#     train_cl$highest_degree==levels(train_cl$highest_degree)[i]~années_edu[i],
+#   }
+# )
+```
+
+-----------------------------------------------------------------------------------------------------------
+
+\vspace{0,2cm}
+
+```{r, message=F}
+train_cl_positif=filter(train_cl,wage>0)
+```
+
+\vspace{0,2cm}
+```{r, message=F}
+train_cl_actif=table_function(train_cl_positif)
+train_cl_actif
+
+train_cl_full=table_function(train_cl)
+train_cl_full
+```
+
+\vspace{0,2cm}
+
+```{r,message=FALSE,warning=F}
+library(GADMTools)
+France <- gadm_sf_loadCountries("FRA", level=2 )
+
+train_cl_actif2=train_cl_actif %>% left_join(departments) 
+train_cl_actif2=rename(train_cl_actif2,NAME_2=Nom.du.département)
+mydata <- data.frame(train_cl_actif2)
+head(mydata)
+```
+
+\vspace{0,2cm}
+```{r,message=FALSE}
+    choropleth(France, 
+               data = mydata, 
+               step=5,
+               value = "taux_femmes", 
+               adm.join = "NAME_2",
+               breaks = "quantile", 
+               palette = "YlOrRd",
+               legend="Taux de femmes par départements",
+               title="représentation du taux de femmes par départements") 
+```
+
+
+```{r,message=FALSE}
+    France_par_salaire=choropleth(France, 
+               data = mydata, 
+               step=5,
+               value = "salaire_moyen", 
+               adm.join = "NAME_2",
+               breaks = "quantile", 
+               palette = "Blues",
+               legend="Salaire moyen par départements",
+               title="représentation des salaires par départements") 
+ France_par_salaire
+```
+
+\vspace{0,2cm}
+```{r,message=FALSE}
+    choropleth(France, 
+               data = mydata, 
+               step=5,
+               value = "années_étude", 
+               adm.join = "NAME_2",
+               breaks = "quantile", 
+               palette = "Greens",
+               legend="Nombre d'année d'études par départements",
+               title="représentation du nombre d'année d'études par départements") 
+```
+
+\vspace{0,2cm}
+
+```{r, message=F}
+quant_9=quantile(as.numeric(train_cl_actif$salaire_moyen), probs=seq(0, 1, 1/9))
+
+list_quant_9=vector("list",9)
+  for (i in 1:9){
+    list_quant_9[[i]]=
+      which(quant_9[i]<=as.numeric(train_cl_actif$salaire_moyen) & 
+      as.numeric(train_cl_actif$salaire_moyen)<quant_9[i+1])
+  }
+list_quant_9
+```
+
+
+\vspace{0,2cm}
+
+# II. Classificaztion hiérarchique classique
+
+\vspace{0,2cm}
+
+décrire un département par le pourcentage de ses habitants féminins, son nombre d'habitants, la répartition des diplômes des habitants, des salaires, etc. Il est recommandé de n'inclure des variables numériques que dans les descriptions pour faciliter l'analyse.
+
+\vspace{0,2cm}
+```{r, warning=F}
+train_cl_sans_dep=train_cl_full %>% 
+  dplyr::select(-Dep)
+
+dend_cl1 <- hclust(dist(train_cl_sans_dep, method="euclidean"), method="single")
+plot(dend_cl1)
+plot(dend_cl1$height, type="b")
+
+###########################################################################
+clusters <- cutree(dend_cl1, 9 ,order_clusters_as_data = F)
+summary(as.factor(clusters))
+dend_cl1_col_9<- color_branches(as.dendrogram(dend_cl1), clusters=clusters,
+                       col=cluster.colors[1:9], size=0.2)
+plot(dend_cl1_col_9, leaflab = "none", yaxt="none")
+```
+\vspace{0,2cm}
+On pourrait choisir entre 5 et 9 clusters, néanmoins ça n'est pas terrible : 
+Par exemple, avec 9 clusters, 72 départements ne semblent former qu'un seul cluster et 5 clusters ne contiennent qu'un département...
+
+\vspace{0,2cm}
+
+# III. Clustering avec Ward
+
+\vspace{0,2cm}
+
+Essayons la méthode de ward :
+
+\vspace{0,2cm}
+
+```{r, message=F}
+dend_cl_ward <- hclust(dist(train_cl_sans_dep, method="euclidean"), method="ward")
+plot(dend_cl_ward)
+plot(dend_cl_ward$height, type="b")
+inertie <- sort(dend_cl_ward$height, decreasing = TRUE)
+plot(inertie[1:20], type = "s", xlab = "Nombre de classes", ylab = "Inertie")
+plot(inertie[1:20], type = "s", xlab = "Nombre de classes", ylab = "Inertie")
+points(c(2, 5, 9), inertie[c(2, 5, 9)], col = c("green3", "red3", "blue3"), cex = 1.5, lwd = 2)
+```
+\vspace{0,2cm}
+
+C'est beaucoup mieux avec Ward. Les "sauts" provoqués par le nombre de clusters semblent équilibrer la décomposition.  
+Par ailleurs, l'étude de l'inertie par rapport aux nombres de classes semblent confirmer les choix de 5 et/ou 9 clusters ($k=2$ est trop petit et $k=12$ me semble trop élevé).
+
+\vspace{0,2cm}
+
+```{r, warning=F}
+
+clusters_ward_5 <- cutree(dend_cl_ward,5,order_clusters_as_data = F)
+summary(as.factor(clusters_ward_5))
+dend_cl1_ward_5<- color_branches(as.dendrogram(dend_cl_ward), clusters=clusters_ward_5,
+                        col=1:5)
+plot(dend_cl1_ward_5, leaflab = "none", yaxt="none")
+
+#####################################################################################
+
+clusters_ward_9 <- cutree(dend_cl_ward,9,order_clusters_as_data = F)
+summary(as.factor(clusters_ward_9))
+dend_cl1_ward_9<- color_branches(as.dendrogram(dend_cl_ward), clusters=clusters_ward_9,
+                        col=1:9)
+plot(dend_cl1_ward_9, leaflab = "none", yaxt="none")
+```
+\vspace{0,2cm}
+
+Je privilégie la répartition à 9 clusters.
+
+\vspace{0,2cm}
+
+```{r, message=F}
+plot.list_cl1 <-
+  list(ggplot(as.ggdend(dend_cl1_col)),
+       ggplot(train_cl_sans_dep, aes(salaire_moyen,nb_individus)) +
+         geom_point(col=clusters, size=0.5))
+
+ggmatrix(plot.list_cl1, nrow=1, ncol=2, showXAxisPlotLabels = F,
+         showYAxisPlotLabels = F, xAxisLabels=c("dendrogram", "scatter plot")) +
+         theme_bw()
+
+#table(clusters, train_cl_full$Dep)
+```
+
+\newpage
+
+# IV. Clustering avec K-means 
+
+\vspace{0,2cm}
+Effectuons un k-means avec 5/9 clusters et une initialisation aléatoire
+
+```{r}
+# K-means avec 5 classes
+kmeans_res.train_cl.pp_5 <- LICORS::kmeanspp(data=train_cl_sans_dep, k = 5, 
+                         start = "random", iter.max = 100, nstart = 1)
+```
+
+\vspace{0,2cm}
+
+```{r}
+kmeans_res.train_cl.pp_5
+```
+
+\vspace{0,2cm}
+On observe une répatrtition un peu différente de celle de de Ward.
+
+\vspace{0,2cm}
+
+```{r}
+summary(as.factor(kmeans_res.train_cl.pp_5$cluster))
+```
+
+\vspace{0,2cm}
+
+```{r}
+train_cl_full.aov=aov(kmeans_res.train_cl.pp_5$cluster~.,data=train_cl_sans_dep)
+summary(train_cl_full.aov)
+```
+
+\vspace{0,2cm}
+
+Une analyse de la variance fournit les résultats suivants :  
+
+3 covariables semblent le plus disciminer (les p_values sont très faibles) :  
+le nombre d'habitants, le salaire moyen, et le nombre d'années d'études
+(pour rappel, le nombre d'individus représente le nombre d'individus étudié par départements)
+
+```{r}
+list_means=vector("list",5)
+for (i in 1:5){
+  list_means[[i]]=which(kmeans_res.train_cl.pp_5$cluster==i)
+}
+list_means
+#table(res.train_cl.pp$cluster,train_cl_full$Dep)
+```
+
+\vspace{0,2cm}
+
+### Qualité du clustering pour k-means
+
+\vspace{0,2cm}
+
+On émet l'hypothèse que les données ont une distribution gaussienne avec des variances isotropes (sans direction privilégiée)
+Le k-means produit des classes parfaitement sphériques
+
+```{r}
+kmeans.res.indices <- matrix(0, nrow=15, ncol=3)
+for (i in 1:15)
+{
+  #K-means
+  #kmeans.res <- LICORS::kmeanspp(blobs[,1:2], k=i, start="random")
+  kmeans.res<-LICORS::kmeanspp(data=train_cl_sans_dep, k = i, 
+                         start = "random")
+  # calcul de la silhouette de chaque observation
+  s.data.set <- silhouette(kmeans.res$cluster, dist(train_cl_sans_dep, method="euclidean"))
+  # % de variance expliquée
+  kmeans.res.indices[i,1] <- kmeans.res$betweenss/kmeans.res$totss
+  # calcul de la silhouette moyenne
+  kmeans.res.indices[i,2] <- (kmeans.res$betweenss/(i-1))/(kmeans.res$tot.withinss/(dim(train_cl_sans_dep)[1]-i))
+  if (is.null(dim(s.data.set))==T)
+    kmeans.res.indices[i,3] <- NA
+  else
+    kmeans.res.indices[i,3] <- mean(s.data.set[,3])
+}
+kmeans.res.indices <- as.data.frame(kmeans.res.indices)
+```
+
+\vspace{0,2cm}
+
+```{r}
+plotList <- list(ggplot(data=kmeans.res.indices, aes(x=1:15, y=kmeans.res.indices[,1])) + 
+                   geom_bar(stat="identity", fill="steelblue") +
+      geom_text(aes(label=round(kmeans.res.indices[,1],2)), vjust=1.6, color="white", size=3.5)+
+                   labs(y="Explained variance variance") +
+                   scale_x_continuous(breaks=1:15) + theme_bw(),
+                 ggplot(data=kmeans.res.indices, aes(x=1:15, y=kmeans.res.indices[,2])) + 
+                   geom_bar(stat="identity", fill="steelblue") +
+                   geom_text(aes(label=round(kmeans.res.indices[,2],2)), vjust=1.6, color="white", size=3.5)+
+                   labs(y="Calinski-Harabasz Index") +
+                   scale_x_continuous(breaks=1:15) + theme_bw(),
+                 ggplot(data=kmeans.res.indices, aes(x=1:15, y=kmeans.res.indices[,3])) + 
+                   geom_bar(stat="identity", fill="steelblue") +
+                   geom_text(aes(label=round(kmeans.res.indices[,3],2)), vjust=1.6, color="white", size=3.5)+
+                   labs(y="Average silhouette") +
+                   scale_x_continuous(breaks=1:15) + theme_bw())
+
+pm <- ggmatrix(
+  plotList, nrow=3, ncol=1, showXAxisPlotLabels = F, showYAxisPlotLabels =F ) + theme_bw()
+pm
+```
+
+\vspace{0,2cm}
+
+il semblerait que 5 clusters soit une bonne valeur... ou 9 pour l'indice silhouette
+bien que l'indice de Calinski-Harabasz en fournisse 12
+
+
+
+```{r}
+
+```
+
+\vspace{0,2cm}
+Le k-means est très intéressant pour faire de la réduction de dimensions.
+Le k-means permet de "résumer "travailler" les données en petits clusters que l'on résume par le centre des classes
+
+```{r}
+
+```
+
+De plus, le kmeans produit un clustering crisp (une observation est affectée à un et un seul cluster)
+
+\newpage
+
+# V. Clustering avec GGM
+
+```{r,message=FALSE}
+```
+
+
+```{r,message=FALSE}
+
+```
+
+
+```{r, message=F}
+
+```
+
+
+```{r, message=F}
+
+```
+
+\vspace{0,2cm}
+
+
+
+# V. Expectation-maximization algorithm
+
+
+\vspace{0,2cm}
+
+On va chercher à combiner k-means et classification hierarchique,
+
+Le k-means est très intéressant pour faire de la réduction de dimensions.
+Le k-means permet de "résumer "travailler" les données en petits clusters que l'on résume par le centre des classes
+
+--> on pourrait essayer le modèle bayésien (si < 50000 lignes)
+
+```{r}
+
+```
+
+
+```{r, message=F}
+# EM avec le vrai nombre de classes et sans contraintes sur la variance
+res.train_cl.em_9 <- Mclust(train_cl_sans_dep, G=9, verbose = T)
+```
+
+
+```{r, message=F}
+# Paramètres estimés par EM
+summary(res.train_cl.em, parameters = T)
+```
+
+
+```{r, message=F}
+#res.train_cl.em$classification
+#table(res.train_cl.em$classification)
+la_liste=list()
+for (i in 1:length(res.train_cl.em$classification))
+  {
+    la_liste[[i]]=(which(res.train_cl.em$classification==i))
+}
+la_liste=la_liste[1:9]
+la_liste
+```
+
+```{r,message=FALSE}
+res.train_cl.em2 <- Mclust(train_cl_sans_dep, G=3:12, verbose = T)
+```
+
+```{r,message=FALSE}
+summary(res.train_cl.em2$BIC)
+plot(res.train_cl.em2$BIC,ylim=c(-8200,-7200))
+```
+
+
+```{r,message=FALSE}
+
+```
+
+
+```{r, message=F}
+
+```
+
+
+```{r, message=F}
+
+```
+
+
+
+
+
+
+
+
+----------------------------------------------------------------------------------------------------------
+
+```{r, message=F}
+train_cl_actif_sans_dep=train_cl_actif %>% 
+  dplyr::select(-Dep)
+
+dend_cl_actif <- hclust(dist(train_cl_sans_dep, method="euclidean"), method="ward")
+plot(dend_cl_actif)
+plot(dend_cl_actif$height, type="b")
+
+###########################################################################
+clusters_actif <- cutree(dend_cl_actif, 9 ,order_clusters_as_data = F)
+summary(as.factor(clusters_actif))
+dend_cl_actif_col<- color_branches(as.dendrogram(dend_cl_actif), clusters=clusters_actif,
+                       col=1:9)
+plot(dend_cl_actif_col, leaflab = "none", yaxt="none")
+```
+
+
+
+# IV. Clustering mixte (k-means + classification hiérarchique)
+
+
+## B. Premiers essais
+
+\vspace{0,2cm}
+
+```{r}
+library("FactoMineR")
+library("factoextra")
+
+```
+
+```{r}
+#FAMD(train_full[sample(1:100000,40),], ncp = 5, sup.var = NULL, ind = NULL, graph = TRUE)
+```
+
+
+
+\vspace{0,2cm}
+```{r}
+
+```
+\vspace{0,2cm}
+
+
+\vspace{0,2cm}
+
+```{r,message=FALSE}
+
+```
+\vspace{0,2cm}
+```{r}
+```
+
+
+
+\vspace{0,2cm}
+
+```{r,message=FALSE}
+
+```
+
+
+\vspace{0,2cm}
+```{r,message=FALSE}
+
+```
+
+
+\vspace{0,2cm}
