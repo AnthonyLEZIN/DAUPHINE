@@ -65,6 +65,8 @@ Vous pouvez utiliser n'importe quel algorithme de clustering vu pendant le cours
 
 \vspace{0,2cm}
 
+Dabs cette première partie, je créer deux ensembles de données agrégées au niveau du département.
+
 \vspace{0,2cm}
 ```{r,message =F}
 # Jointure de city
@@ -96,8 +98,16 @@ head(city)
 11 - EDU18 - Master, DEA, DESS, diplôme grande école niveau bac+5, doctorat de santé  
 12 - EDU19 - Doctorat de recherche (hors santé)  
 
+\vspace{0,2cm}
+
+Je créée une variable supplémentaire "edu" permettant de numériser le niveau d'étude de la façon suivante :
+
+ * ses valeurs représentent le nombre approximatif d'années d'études à partir de l'année de CP (année 0).
+ * lorsque ce nombre n'est pas renseigné où lorsqu'il s'étend sur une plage de plusieurs années, la valeur est fixée au nombre d'année médian (par exemple 2.5 est attribué au nombre d'année d'un individu ayant arrêté sa scolarité entre le CP et le CM2 non révolu)   
+ * Lorsqu'une examen diplomant achève l'année, une majoration de 0.1 est attribué. Ainsi, pour un individu ayant terminé son cycle scolaire en terminale, son nombre d'année d'étude est 12.1 (5 années de primaire, 4 de collège, 3 de lycée et 0.1 du dipôme)
 
 \vspace{0,2cm}
+
 ```{r, message=F}
 # Jointure de toutes les data "learn" afin de former un fichier "train" avec les données "city"
 train_cl=learn %>%
@@ -129,6 +139,17 @@ train_cl[10005:10009,]
 ```
 
 \vspace{0,2cm}
+
+Enfin, je résume chaque département par des statistiques résumant la composition de la population telles  : 
+
+ * le pourcentage de ses habitants féminins
+ * son nombre d'habitants
+ * la répartition des diplômes des habitants
+ * le salaire moyen
+ * le niveau d'étude 
+ 
+
+
 
 ```{r, message=F}
 
@@ -189,21 +210,10 @@ return(temp_model_cl)
 
 \vspace{0,2cm}
 
------------------------------------------------------------------------------------------------------------
+Je crée donc 2 jeux de données :  
 
-```{r, message=F}
-# 
-# levels(train_cl$highest_degree)
-# années_edu=c("2.5","5.1","8.1","10.1","12.1","12.1","14.1","15.6","17.1","20.1","5","8")
-# 
-# train_cl$edu=case_when(
-#   for (i in length(années_edu)){
-#     train_cl$highest_degree==levels(train_cl$highest_degree)[i]~années_edu[i],
-#   }
-# )
-```
-
------------------------------------------------------------------------------------------------------------
+ * un premier ensemble de données correspondant aux départements tels que caractérisés par leur population générale  
+ * un second ensemble de données où seule la population active est prise en compte  
 
 \vspace{0,2cm}
 
@@ -220,6 +230,12 @@ train_cl_full=table_function(train_cl)
 train_cl_full
 ```
 
+\vspace{0,2cm}
+
+J'effectue une carte descriptive des indicateurs que je trouve intéressant.  
+Le nombre pertinent de catégories est l'objet des parties ultérieures.
+
+Pour l'exemple, je visualise des cartes avec des variables comportant 5 ou 9 catégories.
 \vspace{0,2cm}
 
 ```{r,message=FALSE,warning=F}
@@ -273,6 +289,9 @@ head(mydata)
 ```
 
 \vspace{0,2cm}
+Il semble y avoir une corrélation entre le nombre moyen d'année d'étude et le salaire moyen.
+
+\vspace{0,2cm}
 
 ```{r, message=F}
 quant_9=quantile(as.numeric(train_cl_actif$salaire_moyen), probs=seq(0, 1, 1/9))
@@ -289,7 +308,7 @@ list_quant_9
 
 \vspace{0,2cm}
 
-# II. Classificaztion hiérarchique classique
+# II. Classification hiérarchique classique
 
 \vspace{0,2cm}
 
@@ -303,25 +322,26 @@ train_cl_sans_dep=train_cl_full %>%
 dend_cl1 <- hclust(dist(train_cl_sans_dep, method="euclidean"), method="single")
 plot(dend_cl1)
 plot(dend_cl1$height, type="b")
+```
+\vspace{0,2cm}
+La règle du coude engagerait à choisir 5, 9, voire 12 clusters.  
 
-###########################################################################
+\vspace{0,2cm}
+```{r, warning=F}
 clusters <- cutree(dend_cl1, 9 ,order_clusters_as_data = F)
 summary(as.factor(clusters))
 dend_cl1_col_9<- color_branches(as.dendrogram(dend_cl1), clusters=clusters,
-                       col=cluster.colors[1:9], size=0.2)
+                       col=1:9, size=0.2)
 plot(dend_cl1_col_9, leaflab = "none", yaxt="none")
 ```
 \vspace{0,2cm}
-On pourrait choisir entre 5 et 9 clusters, néanmoins ça n'est pas terrible : 
-Par exemple, avec 9 clusters, 72 départements ne semblent former qu'un seul cluster et 5 clusters ne contiennent qu'un département...
+La décomposition dans chacune des configurations est excrécable.  
+Par exemple, avec 9 clusters, 72 départements ne semblent former qu'un seul cluster et 5 clusters ne contiennent qu'un seul département...  
 
+Cette méthode ne semble pas adaptée pour un clustering adéquat.
 \vspace{0,2cm}
 
-# III. Clustering avec Ward
-
-\vspace{0,2cm}
-
-Essayons la méthode de ward :
+# III. Clustering hiérarchique avec la méthode de Ward
 
 \vspace{0,2cm}
 
@@ -331,39 +351,42 @@ plot(dend_cl_ward)
 plot(dend_cl_ward$height, type="b")
 inertie <- sort(dend_cl_ward$height, decreasing = TRUE)
 plot(inertie[1:20], type = "s", xlab = "Nombre de classes", ylab = "Inertie")
-plot(inertie[1:20], type = "s", xlab = "Nombre de classes", ylab = "Inertie")
 points(c(2, 5, 9), inertie[c(2, 5, 9)], col = c("green3", "red3", "blue3"), cex = 1.5, lwd = 2)
 ```
 \vspace{0,2cm}
 
-C'est beaucoup mieux avec Ward. Les "sauts" provoqués par le nombre de clusters semblent équilibrer la décomposition.  
-Par ailleurs, l'étude de l'inertie par rapport aux nombres de classes semblent confirmer les choix de 5 et/ou 9 clusters ($k=2$ est trop petit et $k=12$ me semble trop élevé).
+L'étude de l'inertie par rapport aux nombres de classes semblent confirmer les choix raisonnable de 5 et/ou 9 clusters  ($k=2$ est clairement trop petit et $k=12$ me semble trop élevé).
+
+Créons une fonction permettant de visualiser le dendogramme, ainsi que la répatrtition de la décomposition
+\vspace{0,2cm}
+
+```{r, warning=F}
+clusters_ward=function(n)
+  { 
+    tmp<- cutree(dend_cl_ward,n,order_clusters_as_data = F)
+    dend_cl1_ward_n<- color_branches(as.dendrogram(dend_cl_ward), clusters=tmp,col=1:n)
+  
+    plot(dend_cl1_ward_n, leaflab = "none", yaxt="none")
+    return(summary(as.factor(tmp)))
+
+  }
+```
 
 \vspace{0,2cm}
 
 ```{r, warning=F}
-
-clusters_ward_5 <- cutree(dend_cl_ward,5,order_clusters_as_data = F)
-summary(as.factor(clusters_ward_5))
-dend_cl1_ward_5<- color_branches(as.dendrogram(dend_cl_ward), clusters=clusters_ward_5,
-                        col=1:5)
-plot(dend_cl1_ward_5, leaflab = "none", yaxt="none")
-
-#####################################################################################
-
-clusters_ward_9 <- cutree(dend_cl_ward,9,order_clusters_as_data = F)
-summary(as.factor(clusters_ward_9))
-dend_cl1_ward_9<- color_branches(as.dendrogram(dend_cl_ward), clusters=clusters_ward_9,
-                        col=1:9)
-plot(dend_cl1_ward_9, leaflab = "none", yaxt="none")
+clusters_ward(5)
+clusters_ward(9)
 ```
-\vspace{0,2cm}
 
-Je privilégie la répartition à 9 clusters.
+C'est beaucoup mieux avec la méthode de Ward. Les "sauts" provoqués par le nombre de clusters semblent équilibrer la décomposition. 
 
 \vspace{0,2cm}
 
 ```{r, message=F}
+# Dois-je garder cette partie ?
+
+
 plot.list_cl1 <-
   list(ggplot(as.ggdend(dend_cl1_col)),
        ggplot(train_cl_sans_dep, aes(salaire_moyen,nb_individus)) +
@@ -381,7 +404,8 @@ ggmatrix(plot.list_cl1, nrow=1, ncol=2, showXAxisPlotLabels = F,
 # IV. Clustering avec K-means 
 
 \vspace{0,2cm}
-Effectuons un k-means avec 5/9 clusters et une initialisation aléatoire
+On émet l'hypothèse que les données ont une distribution gaussienne avec des variances isotropes (sans direction privilégiée). Sous cette hypothèse, la méthode des k-means peut se révéler intéressante.  
+Compte-tenu des résultats précédemment obtenus, j'effectue un k-means avec 5 ou 9 clusters et une initialisation aléatoire.
 
 ```{r}
 # K-means avec 5 classes
@@ -396,7 +420,7 @@ kmeans_res.train_cl.pp_5
 ```
 
 \vspace{0,2cm}
-On observe une répatrtition un peu différente de celle de de Ward.
+On observe une répartition un peu différente de celle de de Ward.
 
 \vspace{0,2cm}
 
@@ -430,12 +454,37 @@ list_means
 
 \vspace{0,2cm}
 
+```{r}
+kmeans_res.train_cl.pp=function(n)
+  {
+    tmp=LICORS::kmeanspp(data=train_cl_sans_dep, k = n,start = "random", iter.max = 100, nstart = 1)
+    print(tmp)
+    return(summary(aov(tmp$cluster~.,data=train_cl_sans_dep)))
+  }
+```
+
+\vspace{0,2cm}
+
+```{r}
+kmeans_res.train_cl.pp(5)
+```
+
+\vspace{0,2cm}
+
+```{r}
+kmeans_res.train_cl.pp(9)
+```
+
+\vspace{0,2cm}
+
+Que ce soit en classification à 5 ou 9 clusters, le salaire moyen reste une covariable très discriminante. En revanche, le nombre d'années d'études n'est pas discriminant à 5 clusters contrairement à 9.
+
 ### Qualité du clustering pour k-means
 
 \vspace{0,2cm}
 
-On émet l'hypothèse que les données ont une distribution gaussienne avec des variances isotropes (sans direction privilégiée)
-Le k-means produit des classes parfaitement sphériques
+Le k-means produit des classes parfaitement sphériques. Le nombre de clusters a été déterminé par le biiais d'une autre classification.  
+Utilisons des indicateurs pour déterminer la valeur optimale de $k$.
 
 ```{r}
 kmeans.res.indices <- matrix(0, nrow=15, ncol=3)
@@ -485,24 +534,26 @@ pm
 
 \vspace{0,2cm}
 
-il semblerait que 5 clusters soit une bonne valeur... ou 9 pour l'indice silhouette
-bien que l'indice de Calinski-Harabasz en fournisse 12
+Les indicateurs sont loin d'être d'accord et leur lecture s'avère peu aisée.
 
+Il semblerait que 4, voire 5 clusters soit une bonne valeur pour le pourcentage de variance expliquée.  
+L'indice silhouette fournit 2 clusters (ce qui semble trop peu au vu de la nature des données) et un maximal local à 8 clusters
+Enfin, l'indice de Calinski-Harabasz propose, quant à lui, 12 clusters, (ce qui me semble beaucoup).
 
-
+\vspace{0,2cm}
 ```{r}
 
 ```
 
 \vspace{0,2cm}
-Le k-means est très intéressant pour faire de la réduction de dimensions.
-Le k-means permet de "résumer "travailler" les données en petits clusters que l'on résume par le centre des classes
 
 ```{r}
 
 ```
 
 De plus, le kmeans produit un clustering crisp (une observation est affectée à un et un seul cluster)
+Le k-means est très intéressant pour faire de la réduction de dimensions.
+Le k-means permet de "résumer "travailler" les données en petits clusters que l'on résume par le centre des classes
 
 \newpage
 
@@ -522,42 +573,45 @@ De plus, le kmeans produit un clustering crisp (une observation est affectée à
 ```
 
 
+On va chercher à combiner k-means et classification hiérarchique,
+
+Le k-means est très intéressant pour faire de la réduction de dimensions.
+Le k-means permet de "résumer "travailler" les données en petits clusters que l'on résume par le centre des classes
+
 ```{r, message=F}
 
 ```
 
 \vspace{0,2cm}
 
-
-
-# V. Expectation-maximization algorithm
-
+# V. Modèles bayésiens (Expectation-Maximization algorithm)
 
 \vspace{0,2cm}
 
-On va chercher à combiner k-means et classification hierarchique,
+On va chercher à utiliser un algorithme de mélange de modèle appliqué au clustering (Gaussian Mixture Mode).  
+L'idée principale est que ,par rapport aux autres modèles type k-means, une classe ne possède pas l'exclusivité sur un individu, mais plutôt une probabilité d'appartenance. Ce point important se retrouve également à l'étape de mise à jour des  paramètres ("step M") où la moyenne pondérée par les probabilités d'appartenance se retrouve "plus lissée" que dans les autres modèles précédemment
 
-Le k-means est très intéressant pour faire de la réduction de dimensions.
-Le k-means permet de "résumer "travailler" les données en petits clusters que l'on résume par le centre des classes
-
---> on pourrait essayer le modèle bayésien (si < 50000 lignes)
-
-```{r}
-
-```
-
+\vspace{0,2cm}
 
 ```{r, message=F}
 # EM avec le vrai nombre de classes et sans contraintes sur la variance
 res.train_cl.em_9 <- Mclust(train_cl_sans_dep, G=9, verbose = T)
 ```
 
+```{r, message=F}
+
+names(res.train_cl.em_9)
+class(res.train_cl.em_9)
+```
+
+\vspace{0,2cm}
 
 ```{r, message=F}
 # Paramètres estimés par EM
 summary(res.train_cl.em, parameters = T)
 ```
 
+\vspace{0,2cm}
 
 ```{r, message=F}
 #res.train_cl.em$classification
@@ -571,15 +625,70 @@ la_liste=la_liste[1:9]
 la_liste
 ```
 
-```{r,message=FALSE}
-res.train_cl.em2 <- Mclust(train_cl_sans_dep, G=3:12, verbose = T)
-```
+\vspace{0,2cm}
 
 ```{r,message=FALSE}
-summary(res.train_cl.em2$BIC)
-plot(res.train_cl.em2$BIC,ylim=c(-8200,-7200))
+res.train_cl.em <- Mclust(train_cl_sans_dep, G=2:12, verbose = T)
 ```
 
+\vspace{0,2cm}
+
+```{r,message=FALSE}
+T1<-Sys.time()
+res.train_cl.em <- Mclust(train_cl_sans_dep, G=2:12, verbose = T)
+T2<-Sys.time()
+T2-T1
+```
+
+\vspace{0,2cm}
+
+```{r,message=FALSE}
+summary(res.train_cl.em$BIC)
+plot(res.train_cl.em$BIC,ylim=c(-8200,-7200))
+```
+
+\vspace{0,2cm}
+
+Selon le critère de pénalisation BIC, les 3 modèles les plus performants sont :
+
+ * VVV à 2 clusters (ellipsoidal, varying volume, shape, and orientation)
+ * VVE à 5 et 6 clusters (ellipsoidal, equal orientation)
+
+\vspace{0,2cm}
+
+```{r,message=FALSE}
+round(res.train_cl.em$BIC,digits=2)
+```
+
+\vspace{0,2cm}
+je sélectionne le modèle à 6 clusters.
+
+\vspace{0,2cm}
+```{r,message=FALSE}
+res.train_cl.em_best <- Mclust(train_cl_sans_dep, G=6,modelNames="VVE",verbose = T)
+```
+
+\vspace{0,2cm}
+
+\vspace{0,2cm}
+```{r,message=FALSE}
+summary(res.train_cl.em_best)
+```
+
+\vspace{0,2cm}
+```{r, message=F}
+#res.train_cl.em$classification
+#table(res.train_cl.em$classification)
+la_liste=list()
+for (i in 1:length(res.train_cl.em_best$classification))
+  {
+    la_liste[[i]]=(which(res.train_cl.em_best$classification==i))
+}
+la_liste=la_liste[1:6]
+la_liste
+```
+
+\vspace{0,2cm}
 
 ```{r,message=FALSE}
 
