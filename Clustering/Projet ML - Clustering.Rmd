@@ -9,11 +9,17 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE, message = FALSE)
 ```
 
 # I - Généralités et préparation des données
+
 \vspace{0,2cm}
+
+## A - Intoduction
+
+\vspace{0,2cm}
+
 ```{r,echo=FALSE, message =F, warning = F}
 library(knitr)
 library(tidyverse)
@@ -29,16 +35,14 @@ library(GGally)
 library(cluster)
 library(mclust)
 library(here)
+library(FactoMineR)
+library(GADMTools)
 ```
-\vspace{0,2cm}
-
-Commençons par charger les données
 
 \vspace{0,2cm}
 
 ```{r}
-# Chargement groupé
-
+# Chargement groupé des données
 files_names <- list.files(path=here("./Clustering/project-5-files"))
 
 nb_files <- length(files_names)
@@ -48,26 +52,22 @@ data_names <- strsplit(files_names, split=".csv")
 for (i in 1:nb_files) {
       assign(data_names[[i]],
                 read.csv(paste(here("./Clustering/project-5-files", files_names[i])))
-     )}
+      )}
 ```
 
 \vspace{0,2cm}
 
-Le but de l'analyse exploratoire est de caractériser les départements français du point de vue de leur composition en population générale et en population active. L'analyse doit être mise en oeuvre en deux étapes.
+Le but de l'analyse exploratoire est de caractériser les départements français du point de vue de leur composition en population générale et en population active. 
+L'analyse doit être mise en oeuvre en deux étapes.
 
-**La première étape** devrait consister à créer deux ensembles de données agrégées au niveau du département.
+Je crée donc deux ensembles de données agrégées au niveau du département.
 Dans ces ensembles de données, chaque département métropolitain français doit être décrit par des statistiques résumant la composition de la population.   
-Par exemple, on pourrait décrire un département par le pourcentage de ses habitants féminins, son nombre d'habitants, la répartition des diplômes des habitants, des salaires, etc. Il est recommandé de n'inclure des variables numériques que dans les descriptions pour faciliter l'analyse . Le premier ensemble de données doit correspondre aux départements tels que caractérisés par leur population générale, tandis que dans le second ensemble de données, les départements doivent être décrits en utilisant la population active. Le rapport doit contenir une description des statistiques utilisées pour représenter les départements.
+Le premier ensemble de données correspond aux départements tels que caractérisés par leur population générale, tandis que dans le second ensemble de données, les départements sont décrits en utilisant la population active.
 
-**Dans un deuxième temps**, les deux ensembles de données doivent être analysés à l'aide d'algorithmes de clustering et de visualisation.  
-Le but de l'analyse est d'évaluer si les départements français sont homogènes en termes de composition de la population ou, au contraire, séparés en différents groupes.
-Vous pouvez utiliser n'importe quel algorithme de clustering vu pendant le cours, puis évaluer la composition du cluster et le positionnement relatif en utilisant une cartographie linéaire et / ou non linéaire, des tests statistiques basés sur une analyse de variance, etc. très important. Finalement, vous pouvez envisager d'illustrer si les clusters résultants sont spatialement corrélés, à l'aide d'une cartographie géographique.
+Dans un deuxième temps, les deux ensembles de données seront analysés à l'aide d'algorithmes de clustering et de visualisation dans le but d'évaluer si les départements français sont homogènes en termes de composition de la population ou, au contraire, séparés en différents groupes.
 
 \vspace{0,2cm}
 
-Dabs cette première partie, je créer deux ensembles de données agrégées au niveau du département.
-
-\vspace{0,2cm}
 ```{r,message =F}
 # Jointure de city
 city=city_loc %>%
@@ -76,35 +76,8 @@ city=city_loc %>%
     left_join(departments) %>% 
     relocate(Nom.de.la.commune, Dep,Nom.du.département, REG,inhabitants)%>%
     relocate(insee_code,TOWN_TYPE, .after = Long)
-head(city)
+#head(city)
 ```
-
-\vspace{0,2cm}
-
------------------------------------------------------------------------------------------------------------
-
-\vspace{0,2cm}
-
-1 -EDU1 -Pas de scolarité ou arrêt avant la fin du primaire  
-2 -EDU2 -Aucun diplôme et scolarité interrompue à la fin du primaire ou avant la fin du collège  
-3-EDU3 -Aucun diplôme et scolarité jusqu’à la fin du collège ou au-delà  
-4 - EDU11 -CEP (certificat d’études primaires)  
-5 - EDU12 - BEPC, brevet élémentaire, brevet des collèges, DNB  
-6 - EDU13 -CAP, BEP ou diplôme de niveau équivalent  
-7 - EDU14 - Baccalauréat général ou technologique, brevet supérieur, capacité en droit, DAEU, ESEU  
-8 - EDU15 - Baccalauréat professionnel, brevet professionnel, de technicien ou d’enseignement,   
-9 - EDU16 - BTS, DUT, Deug, Deust, diplôme de la santé ou du social de niveau bac+2, diplôme équivalent  
-10 -EDU17 - Licence, licence pro, maîtrise, diplôme équivalent de niveau bac+3 ou bac+4  
-11 - EDU18 - Master, DEA, DESS, diplôme grande école niveau bac+5, doctorat de santé  
-12 - EDU19 - Doctorat de recherche (hors santé)  
-
-\vspace{0,2cm}
-
-Je créée une variable supplémentaire "edu" permettant de numériser le niveau d'étude de la façon suivante :
-
- * ses valeurs représentent le nombre approximatif d'années d'études à partir de l'année de CP (année 0).
- * lorsque ce nombre n'est pas renseigné où lorsqu'il s'étend sur une plage de plusieurs années, la valeur est fixée au nombre d'année médian (par exemple 2.5 est attribué au nombre d'année d'un individu ayant arrêté sa scolarité entre le CP et le CM2 non révolu)   
- * Lorsqu'une examen diplomant achève l'année, une majoration de 0.1 est attribué. Ainsi, pour un individu ayant terminé son cycle scolaire en terminale, son nombre d'année d'étude est 12.1 (5 années de primaire, 4 de collège, 3 de lycée et 0.1 du dipôme)
 
 \vspace{0,2cm}
 
@@ -113,96 +86,111 @@ Je créée une variable supplémentaire "edu" permettant de numériser le niveau
 train_cl=learn %>%
       left_join(learn_job) %>%  
       left_join(city)
+```
 
-train_cl=mutate(train_cl,
-             edu=case_when
-              (train_cl$highest_degree=="EDU1"~"2.5",
-                train_cl$highest_degree=="EDU2"~"5",
-                train_cl$highest_degree=="EDU3"~"8",
-                train_cl$highest_degree=="EDU11"~"5.1",
-                train_cl$highest_degree=="EDU12"~"8.1",
-                train_cl$highest_degree=="EDU13"~"10.1",
-                train_cl$highest_degree=="EDU14"~"12.1",
-                train_cl$highest_degree=="EDU15"~"12.1",
-                train_cl$highest_degree=="EDU16"~"14.1",
-                train_cl$highest_degree=="EDU17"~"15.6",
-                train_cl$highest_degree=="EDU18"~"17.1",
-                train_cl$highest_degree=="EDU19"~"20.1"
-              )
-            ) %>% 
-      dplyr::select(Person_id, highest_degree,edu, SEX, insee_code, Dep, wage, inhabitants, X, Y)
+\newpage
 
-# Ajout de 0 pour la variable manquantes "wage"
-train_cl$wage[is.na(train_cl$wage)]<-0
-train_cl$edu=as.numeric(train_cl$edu)
-train_cl[10005:10009,]
+## B - Sélection des covariables et construction du Dataset pour le clustering
+
+\vspace{0,2cm}
+
+Afin de décrire les départements, je ne considère que des varaibles numériques ou numérisé (comme préconisé dans l'intitulé). J'intègrele taux de femmes par département, des indicateurs démographiques tels la population, le nb_d'habitants, l'âge moyen.  
+J'aimerai intégrer dans mon étude le niveau d'étude moyen, car je pense qu'il est suscepetible de significativement séparer des clusters. Je créée une variable supplémentaire "edu" permettant de numériser le niveau d'étude de la façon suivante :  
+
+ * ses valeurs représentent le nombre approximatif d'années d'études à partir de l'année de CP (année 0).
+ * lorsque ce nombre n'est pas renseigné où lorsqu'il s'étend sur une plage de plusieurs années, la valeur est fixée au nombre d'année médian (par exemple 2.5 est attribué au nombre d'année d'un individu ayant arrêté sa scolarité entre le CP et le CM2 non révolu)   
+ * Lorsqu'une examen diplomant achève l'année, une majoration de 0.1 est attribué. Ainsi, pour un individu ayant terminé son cycle scolaire en terminale, son nombre d'année d'étude est 12.1 (5 années de primaire, 4 de collège, 3 de lycée et 0.1 du dipôme).
+ 
+\vspace{0,2cm}
+
+```{r, message=F}
+# création de la variable edu
+edu_vec=c(2.5,5,8,5.1,8.1,10.1,12.1,12.1,14.1,15.6,17.1,20.1,-1)
+train_cl=mutate(train_cl,edu=highest_degree) 
+levels(train_cl$edu)<- edu_vec
+train_cl$edu=as.numeric(levels(train_cl$edu))[train_cl$edu]
+#train_cl[10005:10009,]
 ```
 
 \vspace{0,2cm}
 
-Enfin, je résume chaque département par des statistiques résumant la composition de la population telles  : 
+```{r, message=F}
+# qui n'a pas de salaires ?
+table(train_cl[is.na(train_cl$wage),"occupation_42"])
+100*sum(table(train_cl[is.na(train_cl$wage),"occupation_42"])[c(1:6,32:41)])/sum(table(train_cl[is.na(train_cl$wage),"occupation_42"]))
+```
+
+\vspace{0,2cm}
+
+81 % des individus possédant un salaire manquant possède un statut professionnel appartenant aux séries des csp-7 ("anciens quelque chose"), aux csp-8 (chômeurs, militaires, élèves, étudiants, personnes sans activité), aux csp-1 (agriculteurs) et csp_2 (professions libérales). N'ayant aucune donnée permettant de leur définir un salaire, je prend le parti de leur attribuer un salaire égal à 0.
+
+Pour les autres csp, malgré la salaire manquant, je possède quelques informations employeurs. Je décide donc de leur affecter la moyenne des salaires de leur csp correspondante. Cela permet d'ajouter environ 12 000 individus à la catégorie des individus avec un salaire positif.
+
+\vspace{0,2cm}
+
+```{r, message=F}
+# Ajout de 0 pour la variable manquantes "wage"
+train_cl$wage[is.na(train_cl$wage)]<-0
+
+# Moyenne des csp
+wage_affect=train_cl %>% group_by(occupation_42) %>% 
+                 summarize(wage_modifié=round(mean(wage)/mean(wage>0),digits=0)) 
+wage_affect=mutate(wage_affect,wage_modifié=if_else(is.nan(wage_modifié),0,wage_modifié))
+
+# Affectation des salaires moyens pour les individus des csp ciblées
+train_cl=train_cl %>% left_join(wage_affect)  %>% 
+                  relocate(c(wage,wage_modifié),.after = occupation_42) %>% 
+                  mutate(train_cl,wage_modifié=if_else(wage!=0,wage,wage_modifié)) %>% 
+                  dplyr :: select(-wage) %>%
+                  rename(wage=wage_modifié)
+```
+
+\vspace{0,2cm}
+
+Je résume chaque département par des statistiques résumant la composition de la population telles  : 
 
  * le pourcentage de ses habitants féminins
  * son nombre d'habitants
  * la répartition des diplômes des habitants
  * le salaire moyen
- * le niveau d'étude 
- 
-
-
-
-```{r, message=F}
-
-# levels(train_cl$highest_degree)
-# années_edu=c("2.5","5.1","8.1","10.1","12.1","12.1","14.1","15.6","17.1","20.1","5","8")
-
-# 
-# train_cl$edu=
-#   for (i in 1:nrow(train_cl)){
-#     if(train_cl$highest_degree==levels(train_cl$highest_degree)[i]){
-#       train_cl$edu=années_edu[i]
-#     }
-#   }
-# 
-#    for (i in 1:nrow(train_cl)){
-#     levels(train_cl$highest_degree)[i]
-#       train_cl$edu=années_edu[i]
-#     }
-
-```
+ * le niveau d'étude numérisé
 
 \vspace{0,2cm}
 
-
 ```{r, message=F}
-# Une fonction regroupant les infomrations importante par département
+# Une fonction regroupant les informations importantes par département
 table_function=function(model){
+  
+  age_moyen=model %>% group_by(Dep) %>%
+                summarize(age_moyen=mean(AGE_2018))
+  
   salaire_moyen=model %>% group_by(Dep) %>% 
-    summarize(salaire_moyen=mean(wage))
+                summarize(salaire_moyen=mean(wage))
   
   années_étude=model %>% group_by(Dep) %>% 
-    summarize(années_étude=mean(edu))
+               summarize(années_étude=mean(edu))
 
   indiv_par_dep=model %>% group_by(Dep) %>% 
-  summarize(nb_individus=n())
+                summarize(nb_individus=n())
 
   Femmes_par_dep=model %>% group_by(Dep) %>% 
-    summarize(nb_femmes=sum(SEX=="Female")) 
+                 summarize(nb_femmes=sum(SEX=="Female")) 
 
   infos_par_dep=model %>%
-    group_by(insee_code,Dep) %>% 
-    summarize(nb_villes=n(),nb_habitants=mean(inhabitants))%>% 
-    group_by(Dep) %>% 
-    summarize(nb_villes=n(),nb_habitants=sum(nb_habitants))
+                group_by(insee_code,Dep) %>% 
+                summarize(nb_villes=n(),nb_habitants=mean(inhabitants))%>% 
+                group_by(Dep) %>% 
+                summarize(nb_villes=n(),nb_habitants=sum(nb_habitants))
 
   temp_model_cl=infos_par_dep %>% 
-    left_join(salaire_moyen) %>% 
-    left_join(indiv_par_dep) %>% 
-    left_join(Femmes_par_dep) %>% 
-    left_join(années_étude) %>% 
-    mutate(taux_femmes=100*nb_femmes/nb_individus) %>% 
-    dplyr::select(-nb_femmes) %>% 
-    relocate(Dep,nb_habitants,nb_individus,salaire_moyen,années_étude,taux_femmes)
+                left_join(salaire_moyen) %>% 
+                left_join(indiv_par_dep) %>% 
+                left_join(Femmes_par_dep) %>% 
+                left_join(années_étude) %>% 
+                left_join(age_moyen) %>% 
+                mutate(taux_femmes=100*nb_femmes/nb_individus) %>% 
+                dplyr::select(-nb_femmes) %>% 
+                relocate(Dep,nb_habitants,nb_individus,années_étude,salaire_moyen,taux_femmes,age_moyen)
   
 return(temp_model_cl)
 }
@@ -213,277 +201,538 @@ return(temp_model_cl)
 Je crée donc 2 jeux de données :  
 
  * un premier ensemble de données correspondant aux départements tels que caractérisés par leur population générale  
+ 
+\vspace{0,2cm}
+
+```{r, message=F}
+train_cl_full=table_function(train_cl)
+kable(head(train_cl_full))
+```
+
+\vspace{0,2cm}
+
  * un second ensemble de données où seule la population active est prise en compte  
 
 \vspace{0,2cm}
 
 ```{r, message=F}
 train_cl_positif=filter(train_cl,wage>0)
-```
-
-\vspace{0,2cm}
-```{r, message=F}
 train_cl_actif=table_function(train_cl_positif)
-train_cl_actif
-
-train_cl_full=table_function(train_cl)
-train_cl_full
+kable(head(train_cl_actif))
 ```
+
+\newpage
+
+## B - Étude descriptive simple
 
 \vspace{0,2cm}
 
-J'effectue une carte descriptive des indicateurs que je trouve intéressant.  
-Le nombre pertinent de catégories est l'objet des parties ultérieures.
+### 1 - Population globale
 
-Pour l'exemple, je visualise des cartes avec des variables comportant 5 ou 9 catégories.
+\vspace{0,2cm}
+
+J'effectue une carte de France descriptive des indicateurs que je trouve intéressant.  
+Le nombre pertinent de catégories est l'objet des parties ultérieures. 
+Pour l'exemple, je visualise des cartes avec des variables comportant 5 catégories.
+
 \vspace{0,2cm}
 
 ```{r,message=FALSE,warning=F}
-library(GADMTools)
 France <- gadm_sf_loadCountries("FRA", level=2 )
 
-train_cl_actif2=train_cl_actif %>% left_join(departments) 
-train_cl_actif2=rename(train_cl_actif2,NAME_2=Nom.du.département)
-mydata <- data.frame(train_cl_actif2)
-head(mydata)
+# population globale
+train_cl_full2=train_cl_full %>% left_join(departments)
+train_cl_full2=rename(train_cl_full2,NAME_2=Nom.du.département)
+mydata_full=as.data.frame(train_cl_full2)
+kable(head(mydata_full))
 ```
 
 \vspace{0,2cm}
-```{r,message=FALSE}
+
+En théorie, la proportion d'actifs par département a été repectée dans l'échantillonage proposé, mais dans le doute, j'ôte le salaire moyen de l'étude de la population de manière globale.  
+Observons ce qu'un corrélogramme nous indique.
+
+\vspace{0,2cm}
+
+```{r,out.width="300px",warning=FALSE}
+library(corrplot)
+C = cor(train_cl_full2 %>% dplyr :: select (-c(Dep,NAME_2,REG,salaire_moyen)))
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+corrplot(C, method="color", col=col(200),type="upper")
+```
+
+\vspace{0,2cm}
+
+En mettant à la marge les corrélations triviales, on observe une corrélation positive entre le niveau d'études et les indicateurs démographiques. Ainsi, il est plus élevé dna sles zones densément peuplés.  
+L'âge moyen, lui, est fortement négativement corrélé avec le nombre d'habitants/individus, ce qui semble indiquer que les zones les plus densément peuplées sont également les zones "les plus jeunes".  
+Le taux de femmes semble peut influer sur les différents indicateurs.  
+
+\vspace{0,2cm}
+
+```{r,out.width="400px",warning=FALSE}
     choropleth(France, 
-               data = mydata, 
+               data = mydata_full, 
+               step=5,
+               value = "nb_individus", 
+               adm.join = "NAME_2",
+               breaks = "quantile", 
+               palette = "Blues",
+               legend="Nombre d'individus",
+               title="représentation du nombre d'individus par département") 
+```
+
+\vspace{0,2cm}
+
+```{r,out.width="400px",warning=FALSE}
+    choropleth(France, 
+               data = mydata_full, 
+               step=5,
+               value = "age_moyen", 
+               adm.join = "NAME_2",
+               breaks = "quantile", 
+               palette = "Blues",
+               legend="Age_moyen",
+               title="représentation de l'âge moyen par département") 
+```
+
+\vspace{0,2cm}
+
+L'intensité chromatique est bien inversée. La cartographie confirme le 2nd point.
+
+\vspace{0,2cm}
+
+```{r,out.width="400px",warning=FALSE}
+    choropleth(France, 
+               data = mydata_full, 
                step=5,
                value = "taux_femmes", 
                adm.join = "NAME_2",
                breaks = "quantile", 
-               palette = "YlOrRd",
-               legend="Taux de femmes par départements",
-               title="représentation du taux de femmes par départements") 
+               palette = "Greens",
+               legend="Taux de femmes",
+               title="représentation du taux de femmes par département") 
 ```
 
+\vspace{0,2cm}
 
-```{r,message=FALSE}
-    France_par_salaire=choropleth(France, 
-               data = mydata, 
+A ce stade, je n'observe pas d'éléments particuliers sur l'indicateur du taux de femmes par département.
+
+\newpage
+
+### 2 - population active
+
+\vspace{0,2cm}
+
+```{r,message=FALSE,warning=F}
+# population active
+train_cl_actif2=train_cl_actif %>% left_join(departments) 
+train_cl_actif2=rename(train_cl_actif2,NAME_2=Nom.du.département)
+mydata_actif <- data.frame(train_cl_actif2)
+#head(mydata_actif)
+```
+
+\vspace{0,2cm}
+
+```{r,out.width="300px",warning=FALSE}
+library(corrplot)
+C = cor(train_cl_actif2 %>% dplyr :: select (-c(Dep,NAME_2,REG)))
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+corrplot(C, method="color", col=col(200),type="upper")
+```
+
+\vspace{0,4cm}
+
+On retrouve un peu les mêmes tendances que précédemment :  
+le taux de femmes semble toujours peut influer sur les différents indicateurs et l'âge moyen semble toujours corrélé négativement avec le nombre d'habitants (même si cela semble un peu moins marqué). 
+La nouveauté réside sur le salaire moyen. Il est positivement correlé avec le niveau d'études et les indicateurs démographiques. 
+
+\vspace{0,2cm}
+
+```{r,out.width="400px",warning=FALSE}
+par(mfrow=c(1,2))
+    choropleth(France, 
+               data = mydata_actif, 
                step=5,
                value = "salaire_moyen", 
                adm.join = "NAME_2",
                breaks = "quantile", 
                palette = "Blues",
-               legend="Salaire moyen par départements",
-               title="représentation des salaires par départements") 
- France_par_salaire
+               legend="Salaire moyen",
+               title="représentation des salaires moyens par département")
 ```
 
 \vspace{0,2cm}
-```{r,message=FALSE}
+
+```{r,out.width="400px",warning=FALSE}
     choropleth(France, 
-               data = mydata, 
+               data = mydata_actif, 
                step=5,
                value = "années_étude", 
                adm.join = "NAME_2",
                breaks = "quantile", 
-               palette = "Greens",
-               legend="Nombre d'année d'études par départements",
-               title="représentation du nombre d'année d'études par départements") 
+               palette = "Blues",
+               legend="Nombre d'année d'études",
+               title="Nombre d'année d'études par département") 
 ```
 
 \vspace{0,2cm}
-Il semble y avoir une corrélation entre le nombre moyen d'année d'étude et le salaire moyen.
+
+Les deux dernières cartes sont assez similaires. Elles mettent toutes les deux en avant une concentration des salaires et des niveaux d'étude les plus élevés autour des agglomérations les plus denses (Ile-de-France, région lyonnaise, département de l'Ile et Vilaine (en Bretagne) et le sud-Est).  
+Ces régions peuvent être opposées à une zone communément applelée "la diagonale du vide" où les salaires, tout comme les niveaux d'étude semblent moins élevés.
+
+\newpage
+
+# II. Classification Ascendante Hiérarchique dans la population globale
 
 \vspace{0,2cm}
 
-```{r, message=F}
-quant_9=quantile(as.numeric(train_cl_actif$salaire_moyen), probs=seq(0, 1, 1/9))
-
-list_quant_9=vector("list",9)
-  for (i in 1:9){
-    list_quant_9[[i]]=
-      which(quant_9[i]<=as.numeric(train_cl_actif$salaire_moyen) & 
-      as.numeric(train_cl_actif$salaire_moyen)<quant_9[i+1])
-  }
-list_quant_9
-```
-
+Je normalise les données afin d'uniformiser l'échelle de grandeur des nombres pour éviter que les performances du modèle soit dirigées dans la direction des nombres les plus grands.
 
 \vspace{0,2cm}
 
-# II. Classification hiérarchique classique
-
-\vspace{0,2cm}
-
-décrire un département par le pourcentage de ses habitants féminins, son nombre d'habitants, la répartition des diplômes des habitants, des salaires, etc. Il est recommandé de n'inclure des variables numériques que dans les descriptions pour faciliter l'analyse.
-
-\vspace{0,2cm}
 ```{r, warning=F}
 train_cl_sans_dep=train_cl_full %>% 
-  dplyr::select(-Dep)
+  dplyr::select(-Dep) %>% scale
+kable(head(round(train_cl_sans_dep,digits=4)))
+```
 
+\vspace{0,2cm}
+
+```{r, warning=F}
 dend_cl1 <- hclust(dist(train_cl_sans_dep, method="euclidean"), method="single")
 plot(dend_cl1)
+```
+
+\vspace{0,2cm}
+
+```{r,out.width="350px",warning=FALSE}
 plot(dend_cl1$height, type="b")
 ```
-\vspace{0,2cm}
-La règle du coude engagerait à choisir 5, 9, voire 12 clusters.  
 
 \vspace{0,2cm}
+
+La règle du coude engagerait à choisir 3 ou 6 clusters.  
+
+\vspace{0,2cm}
+
 ```{r, warning=F}
-clusters <- cutree(dend_cl1, 9 ,order_clusters_as_data = F)
+clusters <- cutree(dend_cl1, 6 ,order_clusters_as_data = F)
 summary(as.factor(clusters))
-dend_cl1_col_9<- color_branches(as.dendrogram(dend_cl1), clusters=clusters,
-                       col=1:9, size=0.2)
-plot(dend_cl1_col_9, leaflab = "none", yaxt="none")
+dend_cl1_col_6<- color_branches(as.dendrogram(dend_cl1), clusters=clusters,
+                       col=1:6, size=0.2)
+plot(dend_cl1_col_6, leaflab = "none", yaxt="none")
+```
+
+\vspace{0,2cm}
+
+La décomposition dans chacune des configurations est excrécable.  
+Par exemple, avec 6 clusters, 85 départements ne semblent former qu'un seul cluster et 4 clusters ne contiennent qu'un seul département...  
+
+\vspace{0,2cm}
+
+#### Quels sont les départements atypiques ?
+
+\vspace{0,2cm}
+
+```{r, warning=F}
+kable(round(train_cl_sans_dep[which(clusters%in%c(1:4)),],digits=4))
+```
+
+\vspace{0,2cm}
+
+Ces départements isolés ont comme caractéristique commune d'être **moins peuplés que la moyenne**.
+
+\newpage
+
+Effectuons une anova pour identifier d'éventuelles variables discriminantes.
+
+\vspace{0,2cm}
+
+```{r}
+train_cl_full.aov_CAH=aov(clusters~.,data=as.data.frame(train_cl_sans_dep))
+summary(train_cl_full.aov_CAH)
+```
+
+\vspace{0,2cm}
+
+Mon hypothèse est confirmée par une analyse de la variance :  
+mis à part le nombre d'habitants , aucune covariable ne semble significative dans les clusters formés.
+
+\vspace{0,2cm}
+
+J'effectue un clustering sur la classe majoritaire (en l'occurence ici : le cluster n°5) afin de voir si la classification hiérarchique permet d'identifier des éléments intéressants.
+
+\vspace{0,2cm}
+
+```{r, warning=F}
+dend_cl1_maj <- hclust(dist(train_cl_sans_dep[which(clusters==5),], method="euclidean"), method="single")
+plot(dend_cl1_maj)
+```
+
+\vspace{0,2cm}
+
+```{r,out.width="350px",warning=FALSE}
+plot(dend_cl1_maj$height, type="b")
 ```
 \vspace{0,2cm}
-La décomposition dans chacune des configurations est excrécable.  
-Par exemple, avec 9 clusters, 72 départements ne semblent former qu'un seul cluster et 5 clusters ne contiennent qu'un seul département...  
 
-Cette méthode ne semble pas adaptée pour un clustering adéquat.
+La règle du coude engagerait cette fois-ci à choisir 3, 5 clusters. Voyons ce qui se passe avec 5 clusters.
+
 \vspace{0,2cm}
 
-# III. Clustering hiérarchique avec la méthode de Ward
+```{r, warning=F}
+clusters_maj <- cutree(dend_cl1_maj, 5 ,order_clusters_as_data = F)
+summary(as.factor(clusters_maj))
+dend_cl1_col_5_maj<- color_branches(as.dendrogram(dend_cl1), clusters=clusters,
+                       col=1:5, size=0.2)
+plot(dend_cl1_col_5_maj, leaflab = "none", yaxt="none")
+```
+
+\vspace{0,2cm}
+
+```{r}
+train_cl_full.aov_CAH_maj=aov(clusters_maj~.,data=as.data.frame(train_cl_sans_dep[which(clusters==5),]))
+summary(train_cl_full.aov_CAH_maj)
+```
+
+\vspace{0,2cm}
+
+On est ramené à la situation précédente avec un clustering extrêmement déséquilibré. Cette fois-ci, seul l'âge moyen semble discriminant. Bref, cette méthode ne semble pas adaptée pour un clustering adéquat.  
+
+\newpage
+
+# III. Clustering hiérarchique avec la méthode de Ward dans la population globale
+
+\vspace{0,2cm}
+
+## A. Clustering
 
 \vspace{0,2cm}
 
 ```{r, message=F}
 dend_cl_ward <- hclust(dist(train_cl_sans_dep, method="euclidean"), method="ward")
 plot(dend_cl_ward)
-plot(dend_cl_ward$height, type="b")
-inertie <- sort(dend_cl_ward$height, decreasing = TRUE)
-plot(inertie[1:20], type = "s", xlab = "Nombre de classes", ylab = "Inertie")
-points(c(2, 5, 9), inertie[c(2, 5, 9)], col = c("green3", "red3", "blue3"), cex = 1.5, lwd = 2)
 ```
-\vspace{0,2cm}
-
-L'étude de l'inertie par rapport aux nombres de classes semblent confirmer les choix raisonnable de 5 et/ou 9 clusters  ($k=2$ est clairement trop petit et $k=12$ me semble trop élevé).
-
-Créons une fonction permettant de visualiser le dendogramme, ainsi que la répatrtition de la décomposition
-\vspace{0,2cm}
-
-```{r, warning=F}
-clusters_ward=function(n)
-  { 
-    tmp<- cutree(dend_cl_ward,n,order_clusters_as_data = F)
-    dend_cl1_ward_n<- color_branches(as.dendrogram(dend_cl_ward), clusters=tmp,col=1:n)
-  
-    plot(dend_cl1_ward_n, leaflab = "none", yaxt="none")
-    return(summary(as.factor(tmp)))
-
-  }
-```
-
-\vspace{0,2cm}
-
-```{r, warning=F}
-clusters_ward(5)
-clusters_ward(9)
-```
-
-C'est beaucoup mieux avec la méthode de Ward. Les "sauts" provoqués par le nombre de clusters semblent équilibrer la décomposition. 
 
 \vspace{0,2cm}
 
 ```{r, message=F}
-# Dois-je garder cette partie ?
+plot(dend_cl_ward$height, type="b")
+inertie <- sort(dend_cl_ward$height, decreasing = TRUE)
+plot(inertie[1:20], type = "s", xlab = "Nombre de classes", ylab = "Inertie")
+points(c(2, 4, 6), inertie[c(2, 4, 6)], col = c("green3", "red3", "blue3"), cex = 1.5, lwd = 2)
+```
 
+\vspace{0,2cm}
 
-plot.list_cl1 <-
-  list(ggplot(as.ggdend(dend_cl1_col)),
-       ggplot(train_cl_sans_dep, aes(salaire_moyen,nb_individus)) +
-         geom_point(col=clusters, size=0.5))
+L'étude de l'inertie par rapport aux nombres de classes semblent confirmer les choix raisonnables de 4 et/ou 6 clusters  ($k=2$ me semble trop faible).  
 
-ggmatrix(plot.list_cl1, nrow=1, ncol=2, showXAxisPlotLabels = F,
-         showYAxisPlotLabels = F, xAxisLabels=c("dendrogram", "scatter plot")) +
-         theme_bw()
+Observons les dendogrammes associés, ainsi que leurs clusters respectifs.
 
-#table(clusters, train_cl_full$Dep)
+\vspace{0,2cm}
+
+```{r, warning=F}
+les_clusters_ward=function(n)
+  {
+    tmp2 <- cutree(dend_cl_ward,n)
+    res=list(clusters=summary(as.factor(tmp2)),
+             clusters_ward=tmp2
+             )
+    return(res)
+}
+```
+
+\vspace{0,2cm}
+
+Ainsi pour 4 clusters
+
+\vspace{0,2cm}
+
+```{r, warning=F}
+    dend_cl1_ward_n = function(n) color_branches(as.dendrogram(dend_cl_ward), 
+        clusters=cutree(dend_cl_ward,n,order_clusters_as_data = F),col=1:n)
+```
+
+\vspace{0,2cm}
+
+```{r,out.width="300px",warning=FALSE}
+plot(dend_cl1_ward_n(4), leaflab = "none", yaxt="none")
+les_clusters_ward(4)
+```
+
+\vspace{0,2cm}
+
+Ainsi pour 6 clusters
+
+\vspace{0,2cm}
+
+```{r,out.width="300px",warning=FALSE}
+plot(dend_cl1_ward_n(6), leaflab = "none", yaxt="none")
+les_clusters_ward(6)
+```
+\vspace{0,2cm}
+
+C'est beaucoup mieux avec la méthode de Ward.
+Les "sauts" provoqués par le nombre de clusters semblent équilibrer la décomposition.
+
+\vspace{0,2cm}
+
+```{r}
+train_cl_full.aov_ward=function (n)
+  {tmp= aov(les_clusters_ward(n)$clusters_ward~.,data=as.data.frame(train_cl_sans_dep))
+return(summary(tmp))
+}
+```
+
+\vspace{0,2cm}
+
+```{r}
+train_cl_full.aov_ward(4)
+```
+
+\vspace{0,2cm}
+
+```{r}
+train_cl_full.aov_ward(6)
+```
+
+\vspace{0,2cm}
+
+Dans une classification à 4 ou 6 clusters, le taux de femmes, le nombre d'année d'études, le salaire moyen, le nombre d'habitants et l'âge moyen s'avèrent être des covariables extrêmement ou sensiblement discriminantes.
+
+\newpage
+
+## B. ACP avec la méthode de Ward
+
+\vspace{0,2cm}
+
+### 1. Pourcentage de variance expliquée
+
+\vspace{0,2cm}
+
+Observons le pourcentage de variance expliquée.
+
+\vspace{0,2cm}
+
+```{r,fig.width=9, fig.height=4.5}
+par(mfrow=c(1,2))
+# réalisation de l'ACP
+res.pca = PCA(train_cl_sans_dep,graph=FALSE)
+
+#valeurs propres et composantes
+kable(res.pca$eig)
+barplot(res.pca$eig[,1])
+
+#critère du coude
+plot(1:7,res.pca$eig[1:7],pch=1, type="o", xlab="n° de la valeur propre", ylab="valeur de la valeur propre")
+x.coude=c(1,4,7)
+x2.coude=c(1,2,7)
+y.coude=c(res.pca$eig[1],res.pca$eig[4],res.pca$eig[7])
+y2.coude=c(res.pca$eig[1],res.pca$eig[2],res.pca$eig[7])
+points(x.coude,y.coude, type="l",col="red",lty=2)
+points(x2.coude,y2.coude, type="l",col="green",lty=2)
+```
+
+\vspace{0,2cm}
+
+En ACP normée, l’inertie moyenne $I/p$ vaut 1, je ne devrais retenir que les axes associés à des valeurs propre "quasi" supérieures à 1, mais je préfère conserver le nombre de groupes fourni par le clustering.
+
+La proportion d'inertie expliquée par les 2 premiers axes est de de 73 %, 87% pour les 3 premiers, 92% pour les 4 premiers et 96% pour les 5 premiers.
+
+\newpage
+
+### 2. Description des axes selon les individus
+
+Je pars des 4 clusters originels définis par la méthode de ward.
+
+\vspace{0,2cm}
+
+```{r}
+clusters_pca=as.data.frame(cbind(les_clusters_ward(4)$clusters_ward,train_cl_sans_dep))
+colnames(clusters_pca)[1]="Cluster"
+clusters_pca$Cluster=factor(clusters_pca$Cluster,levels=1:4)
+```
+
+\vspace{0,2cm}
+
+J'observe les individus obtenus par l'ACP en "séparant" les éléments selon leurs classes.
+
+\vspace{0,2cm}
+
+```{r,out.width="400px",warning=FALSE}
+res.pca = PCA(clusters_pca,ncp=4,quali.sup=1,graph=FALSE)
+plot(res.pca,habillage=1,col.hab=c("blue","purple","red","green"),choix="ind")
+```
+
+\vspace{0,2cm}
+Le 1er plan de l'ACP semble convenablement départager les individus en fonction des clusters retenus.
+
+L'axe 1 semble opposer les individus de la classe 3 et 4 (positivement corrélés avec cet axe) avec ceux des classes 1 et 2 (négativement corrélés).  
+
+L'axe 2, lui, oppose parfaitement les individus des clusters 3 et 4.  
+En revanche, les clusters 1 et 2 sont mal séparés par cet axe.
+
+\vspace{0,2cm}
+
+J'étudie les points possédant une contribution maximale sur chacun des axes sélectionnés en terme de $cos^2$ et non significative sur les autres.  
+
+\vspace{0,2cm}
+
+```{r}
+pts_max=function(model,nb)
+  {
+  tab=NULL
+  for (i in 1:nb){
+    tmp=model$ind$cos2[,i]==max(model$ind$cos2[,i])
+    ind=which(tmp)
+    tab=cbind(tab,c(ind,round(model$ind$cos2[ind,],digits=2)))
+
+  }
+      return(t(tab))
+}
+kable(pts_max(res.pca,4))
 ```
 
 \newpage
 
-# IV. Clustering avec K-means 
-
-\vspace{0,2cm}
-On émet l'hypothèse que les données ont une distribution gaussienne avec des variances isotropes (sans direction privilégiée). Sous cette hypothèse, la méthode des k-means peut se révéler intéressante.  
-Compte-tenu des résultats précédemment obtenus, j'effectue un k-means avec 5 ou 9 clusters et une initialisation aléatoire.
-
-```{r}
-# K-means avec 5 classes
-kmeans_res.train_cl.pp_5 <- LICORS::kmeanspp(data=train_cl_sans_dep, k = 5, 
-                         start = "random", iter.max = 100, nstart = 1)
-```
+Voici les individus sélectionnés selon les clusters allant de 1 à 4
 
 \vspace{0,2cm}
 
 ```{r}
-kmeans_res.train_cl.pp_5
-```
-
-\vspace{0,2cm}
-On observe une répartition un peu différente de celle de de Ward.
-
-\vspace{0,2cm}
-
-```{r}
-summary(as.factor(kmeans_res.train_cl.pp_5$cluster))
+kable(round(train_cl_sans_dep[c(32,28,18,84),],digits=4))
 ```
 
 \vspace{0,2cm}
 
-```{r}
-train_cl_full.aov=aov(kmeans_res.train_cl.pp_5$cluster~.,data=train_cl_sans_dep)
-summary(train_cl_full.aov)
-```
+L'ACP apporte de nouveaux éléments d'interprétation.
+
+Il semble que :  
+
+ * le cluster 1 caractérise les départements denses en nombre de villes, en nombre d'habitants avec une population plutôt jeune (bien en)dessous de la moyenne). Ces individus ont un un taux de femmes, un salaire et un niveau d'étude au-dessus de la moyenne.
+  * le cluster 2 caractérise les départements dont les individus ont un salaire et un niveau d'étude en-dessous de la moyenne en conservant les autres indicateurs au-dessus
+  * le cluster 3 caractérise les départements dont les individus ont un salaire et un niveau d'étude fortement en-dessous de la moyenne. Ils résident dans un département plus faiblement peuplé comportant un taux de femmes assez bas
+  * le cluster 4 semble plus délicat à inéterpréter. Néanmoins, c'est seulement dans ce cluster que le salaires sont au-dessous de la moyenne alors que le niveau d'études est au-dessus,. Même phénomène pour le nombre d'habitants plutôt important par rapport au nombre de villes.
+ 
+\newpage
+
+# IV. Clustering avec K-means dans la population globale
 
 \vspace{0,2cm}
 
-Une analyse de la variance fournit les résultats suivants :  
-
-3 covariables semblent le plus disciminer (les p_values sont très faibles) :  
-le nombre d'habitants, le salaire moyen, et le nombre d'années d'études
-(pour rappel, le nombre d'individus représente le nombre d'individus étudié par départements)
-
-```{r}
-list_means=vector("list",5)
-for (i in 1:5){
-  list_means[[i]]=which(kmeans_res.train_cl.pp_5$cluster==i)
-}
-list_means
-#table(res.train_cl.pp$cluster,train_cl_full$Dep)
-```
+## A. Clustering
 
 \vspace{0,2cm}
 
-```{r}
-kmeans_res.train_cl.pp=function(n)
-  {
-    tmp=LICORS::kmeanspp(data=train_cl_sans_dep, k = n,start = "random", iter.max = 100, nstart = 1)
-    print(tmp)
-    return(summary(aov(tmp$cluster~.,data=train_cl_sans_dep)))
-  }
-```
+### 1. Choix du nombre de classes
 
 \vspace{0,2cm}
 
-```{r}
-kmeans_res.train_cl.pp(5)
-```
+On émet l'hypothèse que les données ont une distribution gaussienne avec des variances isotropes (sans direction privilégiée). Sous cette hypothèse, la méthode des k-means peut se révéler intéressante pour, par exmeple, effectuer de la réduction de dimensions. Sa construction permet de regouper les données en petits clusters que l'on résume par le centre des classes obtenues. 
 
 \vspace{0,2cm}
 
-```{r}
-kmeans_res.train_cl.pp(9)
-```
-
-\vspace{0,2cm}
-
-Que ce soit en classification à 5 ou 9 clusters, le salaire moyen reste une covariable très discriminante. En revanche, le nombre d'années d'études n'est pas discriminant à 5 clusters contrairement à 9.
-
-### Qualité du clustering pour k-means
-
-\vspace{0,2cm}
-
-Le k-means produit des classes parfaitement sphériques. Le nombre de clusters a été déterminé par le biiais d'une autre classification.  
+Le k-means produit des classes parfaitement sphériques. Le nombre de clusters a été déterminé par le biais d'une autre classification.  
 Utilisons des indicateurs pour déterminer la valeur optimale de $k$.
 
 ```{r}
@@ -491,7 +740,6 @@ kmeans.res.indices <- matrix(0, nrow=15, ncol=3)
 for (i in 1:15)
 {
   #K-means
-  #kmeans.res <- LICORS::kmeanspp(blobs[,1:2], k=i, start="random")
   kmeans.res<-LICORS::kmeanspp(data=train_cl_sans_dep, k = i, 
                          start = "random")
   # calcul de la silhouette de chaque observation
@@ -536,249 +784,817 @@ pm
 
 Les indicateurs sont loin d'être d'accord et leur lecture s'avère peu aisée.
 
-Il semblerait que 4, voire 5 clusters soit une bonne valeur pour le pourcentage de variance expliquée.  
-L'indice silhouette fournit 2 clusters (ce qui semble trop peu au vu de la nature des données) et un maximal local à 8 clusters
-Enfin, l'indice de Calinski-Harabasz propose, quant à lui, 12 clusters, (ce qui me semble beaucoup).
+Il semblerait que 9 clusters fournissent une bonne valeur pour le pourcentage de variance expliquée.  
+L'indice silhouette fournit un maximum à 2 clusters (ce qui semble trop peu au vu de la nature des données) et ne cesse de décroître.
+Enfin, l'indice de Calinski-Harabasz propose, quant à lui, 2 ou 3 clusters.
 
-\vspace{0,2cm}
-```{r}
-
-```
-
-\vspace{0,2cm}
-
-```{r}
-
-```
-
-De plus, le kmeans produit un clustering crisp (une observation est affectée à un et un seul cluster)
-Le k-means est très intéressant pour faire de la réduction de dimensions.
-Le k-means permet de "résumer "travailler" les données en petits clusters que l'on résume par le centre des classes
+Compte-tenu des résultats précédemment obtenus, j'effectue un k-means avec 5 clusters et une initialisation aléatoire.
 
 \newpage
 
-# V. Clustering avec GGM
+### 2. k-means à 5 classes
 
-```{r,message=FALSE}
-```
+\vspace{0,2cm}
 
-
-```{r,message=FALSE}
-
-```
-
-
-```{r, message=F}
-
-```
-
-
-On va chercher à combiner k-means et classification hiérarchique,
-
-Le k-means est très intéressant pour faire de la réduction de dimensions.
-Le k-means permet de "résumer "travailler" les données en petits clusters que l'on résume par le centre des classes
-
-```{r, message=F}
-
+```{r}
+set.seed(222)
+kmeans_res.train_cl.pp_5 <- LICORS::kmeanspp(data=train_cl_sans_dep, k = 5, 
+                         start = "random", iter.max = 100, nstart = 1)
 ```
 
 \vspace{0,2cm}
 
-# V. Modèles bayésiens (Expectation-Maximization algorithm)
+```{r}
+kmeans_res.train_cl.pp_5
+```
+
+\vspace{0,2cm}
+
+Effectuons une analyse de la variance afin de déterminer les variables les plus discriminantes
+
+\vspace{0,2cm}
+
+```{r}
+train_cl_full.aov_kmeans=aov(kmeans_res.train_cl.pp_5$cluster~.,data=as.data.frame(train_cl_sans_dep))
+summary(train_cl_full.aov_kmeans)
+```
+
+\vspace{0,2cm}
+
+Une analyse de la variance du clustering k-means relève que les covariables disciminantes sont plutôt de nature démographique : nombre d'habitants, d'individus, de villes, l'âge moyen et la proportion de femmes.
+
+\newpage
+
+Voici la classification obtenue
+
+\vspace{0,2cm}
+
+```{r, message=F}
+la_liste_km=vector("list",length(kmeans_res.train_cl.pp_5$size))
+max_km=max(kmeans_res.train_cl.pp_5$size)
+nb_cl=length(kmeans_res.train_cl.pp_5$size)
+for (i in 1:nb_cl)
+  {
+    la_liste_km[[i]]=which(kmeans_res.train_cl.pp_5$cluster==i)
+    if(length(la_liste_km[[i]])<max_km)
+      {
+      la_liste_km[[i]]=c(la_liste_km[[i]],rep(NA,max_km-length(la_liste_km[[i]]+1)))
+    }
+}
+groupe_km=as.data.frame(matrix(unlist(la_liste_km),nrow=max_km,ncol=nb_cl))
+colnames(groupe_km)=paste("Cluster",1:length(kmeans_res.train_cl.pp_5$size),sep=" ")
+kable(groupe_km)
+```
+
+\newpage
+
+## B. ACP avec k-means
+
+\vspace{0,2cm}
+
+Je pars des 5 clusters originels définis par la méthode des k-means.
+
+\vspace{0,2cm}
+
+```{r}
+clusters_kmeans_pca=as.data.frame(cbind(kmeans_res.train_cl.pp_5$cluster,train_cl_sans_dep))
+colnames(clusters_kmeans_pca)[1]="Cluster"
+clusters_kmeans_pca$Cluster=factor(clusters_kmeans_pca$Cluster,levels=1:5)
+```
+
+\vspace{0,2cm}
+
+J'observe les individus obtenus par l'ACP en "séparant" les éléments selon leurs classes.
+
+\vspace{0,2cm}
+
+```{r,out.width="400px",warning=FALSE}
+res.pca_kmeans= PCA(clusters_kmeans_pca,ncp=5,quali.sup=1,graph=FALSE)
+plot(res.pca_kmeans,habillage=1,col.hab=c("blue","purple","red","green","black"),choix="ind")
+```
+\vspace{0,2cm}
+
+### Interprétation des axes
+
+\vspace{0,2cm}
+
+Le 1er plan de l'ACP semble convenablement départager les individus en fonction des clusters retenus.
+
+L'axe 1 semble opposer les individus des classes 1,2 et 5 (positivement corrélés avec cet axe) avec ceux des classes 3 et 4 (négativement corrélés avec cet axe).  
+
+L'axe 2 oppose parfaitement les individus des clusters 1,2 avec ceux de la claqsse 5 et 4. En revanche, les clusters 3 et 4 sont mal séparés par cet axe.
+
+\vspace{0,2cm}
+
+### Différence d'affectation entre Ward et EM
+
+\vspace{0,2cm}
+
+Des petites différences de sélection se retrouvent sur des individus situés proche des axes de l'ACP (surtout l'axe 1). Par exemple, les individus (1,6 30) sont sont dans la même classe avec Ward, mais dans 3 classes séparées avec kmeans.
+On observe le même phénomène pour les individus 13 et 78.
+
+\newpage
+
+En étudiant les points possédant une contribution maximale sur les axes sélectionnés en terme de $cos^2$ et non significative sur les autres, j'obtiens :
+
+\vspace{0,2cm}
+
+```{r}
+# Points à forte contribution sur les axes
+kable(pts_max(res.pca_kmeans,5))
+```
+
+\vspace{0,2cm}
+
+Voici les individus sélectionnés selon les clusters allant de 1 à 5. Ce sont les mêmes que dans la méthode de Ward. L'interprétation ds clusters est donc la même pour les 4 premiers.
+
+\vspace{0,2cm}
+
+```{r}
+kable(round(train_cl_sans_dep[c(32,28,33,84,27),],digits=4))
+```
+
+\vspace{0,2cm}
+
+Le cluster 5 conserve l'opposition du cluster 4 en terme de niveau d'étude/salaires, mais est un peu à l'opposé au niveau démographique : nombre de villes plus élévé que la moyenne, mais moins d'individus et moins d'habitants.
+(pour rappel, dans le cluster 4, les salaires étaient au-dessous de la moyenne alors que le niveau d'études est au-dessus. On observait le même phénomène pour le nombre d'habitants plutôt important par rapport au nombre de villes)
+
+
+\vspace{0,2cm}
+
+Une spécificité des kmeans est que par construction, il produit des clusters "parfaitement sphériques", ce qui n'est pas toujours adapté à la structure des données. De plus, kmeans est un clustering crisp, c'est-à-dire qu'une observation est affectée à un et un seul cluster. Ce qui peut poser problème pour les individus situés "à la frontière" de plusieurs clusters.
+
+Pour palier à ces caractéristiques de construction, nous allons tenter d'implémenter un algorithme EM (Expectation Maximization) dans un modèle bayésien.
+
+\newpage
+
+# V. Modèles bayésiens (Expectation-Maximization algorithm) dans la population globale
+
+\vspace{0,2cm}
+
+## A. Clustering
 
 \vspace{0,2cm}
 
 On va chercher à utiliser un algorithme de mélange de modèle appliqué au clustering (Gaussian Mixture Mode).  
-L'idée principale est que ,par rapport aux autres modèles type k-means, une classe ne possède pas l'exclusivité sur un individu, mais plutôt une probabilité d'appartenance. Ce point important se retrouve également à l'étape de mise à jour des  paramètres ("step M") où la moyenne pondérée par les probabilités d'appartenance se retrouve "plus lissée" que dans les autres modèles précédemment
+L'idée principale est que : par rapport aux autres modèles type k-means, une classe ne possède pas l'exclusivité sur un individu, mais plutôt une probabilité d'appartenance. Ce point important se retrouve également à l'étape de mise à jour des  paramètres ("step M") où la moyenne pondérée par les probabilités d'appartenance se retrouve "plus lissée" que dans les autres modèles précédemment
 
 \vspace{0,2cm}
 
-```{r, message=F}
-# EM avec le vrai nombre de classes et sans contraintes sur la variance
-res.train_cl.em_9 <- Mclust(train_cl_sans_dep, G=9, verbose = T)
-```
-
-```{r, message=F}
-
-names(res.train_cl.em_9)
-class(res.train_cl.em_9)
-```
-
-\vspace{0,2cm}
-
-```{r, message=F}
-# Paramètres estimés par EM
-summary(res.train_cl.em, parameters = T)
-```
-
-\vspace{0,2cm}
-
-```{r, message=F}
-#res.train_cl.em$classification
-#table(res.train_cl.em$classification)
-la_liste=list()
-for (i in 1:length(res.train_cl.em$classification))
-  {
-    la_liste[[i]]=(which(res.train_cl.em$classification==i))
-}
-la_liste=la_liste[1:9]
-la_liste
-```
+Je recherche le nombre de clusters adéquat proposé par l'algorithme EM. Pour cela, je choisis arbitrairement "un nombre minimal de classes non trivial" en proposant une décomposition avec au moins 4 clusters.
 
 \vspace{0,2cm}
 
 ```{r,message=FALSE}
+# T1<-Sys.time()
 res.train_cl.em <- Mclust(train_cl_sans_dep, G=2:12, verbose = T)
-```
-
-\vspace{0,2cm}
-
-```{r,message=FALSE}
-T1<-Sys.time()
-res.train_cl.em <- Mclust(train_cl_sans_dep, G=2:12, verbose = T)
-T2<-Sys.time()
-T2-T1
+# T2<-Sys.time()
+# T2-T1
 ```
 
 \vspace{0,2cm}
 
 ```{r,message=FALSE}
 summary(res.train_cl.em$BIC)
-plot(res.train_cl.em$BIC,ylim=c(-8200,-7200))
+plot(res.train_cl.em$BIC)
 ```
 
 \vspace{0,2cm}
 
 Selon le critère de pénalisation BIC, les 3 modèles les plus performants sont :
 
- * VVV à 2 clusters (ellipsoidal, varying volume, shape, and orientation)
- * VVE à 5 et 6 clusters (ellipsoidal, equal orientation)
+ * VVV (ellipsoidal, varying volume, shape, and orientation) et VEV (ellipsoidal, equal shape) à 2 clusters 
+ * VVE à 3 clusters (ellipsoidal, equal orientation)
+
+Je choisis le 3ème modèle, soit celui possédant 3 clusters 
 
 \vspace{0,2cm}
 
 ```{r,message=FALSE}
-round(res.train_cl.em$BIC,digits=2)
+#round(res.train_cl.em$BIC,digits=2)
 ```
 
 \vspace{0,2cm}
-je sélectionne le modèle à 6 clusters.
 
-\vspace{0,2cm}
 ```{r,message=FALSE}
-res.train_cl.em_best <- Mclust(train_cl_sans_dep, G=6,modelNames="VVE",verbose = T)
+res.train_cl.em_best <- Mclust(train_cl_sans_dep, G=3,modelNames="VVE",verbose = T)
 ```
 
 \vspace{0,2cm}
 
-\vspace{0,2cm}
 ```{r,message=FALSE}
-summary(res.train_cl.em_best)
+#res.train_cl.em_best
+classif_em=as.numeric(res.train_cl.em_best$classification)
+classif_em
+table(classif_em)
 ```
 
 \vspace{0,2cm}
+
+Voici la décomposition par clusters
+
+\vspace{0,2cm}
+
 ```{r, message=F}
-#res.train_cl.em$classification
-#table(res.train_cl.em$classification)
-la_liste=list()
-for (i in 1:length(res.train_cl.em_best$classification))
+la_liste_em=vector("list",length(res.train_cl.em_best$classification))
+max_em=max(table(classif_em))
+nb_cl=length(table(classif_em))
+for (i in 1:nb_cl)
   {
-    la_liste[[i]]=(which(res.train_cl.em_best$classification==i))
+    la_liste_em[[i]]=which(res.train_cl.em_best$classification==i)
+    if(length(la_liste_em[[i]])<max_em)
+      {
+      la_liste_em[[i]]=c(la_liste_em[[i]],rep(NA,max_em-length(la_liste_em[[i]]+1)))
+    }
 }
-la_liste=la_liste[1:6]
-la_liste
+groupe_em=as.data.frame(matrix(unlist(la_liste_em),nrow=max_em,ncol=nb_cl))
+colnames(groupe_em)=paste("Cluster",1:nb_cl,sep=" ")
+kable(groupe_em)
+```
+
+\newpage
+
+## B. ACP avec EM
+
+\vspace{0,2cm}
+
+```{r}
+clusters_em_pca=as.data.frame(cbind(classif_em,train_cl_sans_dep))
+colnames(clusters_em_pca)[1]="Cluster"
+clusters_em_pca$Cluster=factor(clusters_em_pca$Cluster,levels=1:3)
 ```
 
 \vspace{0,2cm}
 
-```{r,message=FALSE}
+J'observe les individus obtenus par l'ACP en "séparant" les éléments selon leurs classes.
 
+\vspace{0,2cm}
+
+```{r,out.width="400px",warning=FALSE}
+res.pca_em= PCA(clusters_em_pca,ncp=3,quali.sup=1,graph=FALSE)
+plot(res.pca_em,habillage=1,col.hab=c("blue","purple","red"),choix="ind")
 ```
 
+\vspace{0,2cm}
+
+### Interprétation des axes
+
+\vspace{0,2cm}
+
+Dans le premier plan de l'ACP, l'axe 1 semble opposer les individus de la classe 3  (positivement corrélés avec cet axe) avec ceux des classes 1 et 2 (négativement corrélés avec cet axe).  
+L'axe 2 oppose plutôt les individus des clusters 1 et 2.
+
+\vspace{0,2cm}
+
+### Différence d'affectation entre EM et Kmeans
+
+\vspace{0,2cm}
+
+On observe le même type de différence d'affectation pour certains individus entre les algorihtmes Kmeans et EM.
+Ainsi, les individus (9, 53 ,30) qui semblaient "un peu perdus dans une classe étrangère" avec la méthode Ward se retrouvent de la classe de leurs plus proches voisins avec EM.
+De même que dans la section précédente, certains points proches des axes (les individus (5,49) pour l'axe 1, (28,81) pour l'axe 2 semble être attibués à 2 familles de classe différente.
+
+On observe le même type de différence d'affectation pour certains individus entre les algorihtmes Kmeans et EM.
+Ainsi, les individus (9, 53 ,30) qui semblaient "un peu perdus dans une classe étrangère" avec la méthode Ward se retrouvent de la classe de leurs plus proches voisins avec EM.
+De même que dans la section précédente, certains points proches des axes (les individus (5,49) pour l'axe 1, (28,81) pour l'axe 2 semble être attibués à 2 familles de classe différente.
+
+\newpage
+
+En étudiant les points possédant une contribution maximale sur les axes sélectionnés en terme de $cos^2$ et non significative sur les autres, j'obtiens :
+
+\vspace{0,2cm}
+
+```{r}
+# Points à forte contribution sur les axes
+kable(pts_max(res.pca_em,3))
+```
+
+\vspace{0,2cm}
+
+Voici les individus sélectionnés selon les clusters allant de 1 à 3.  
+Ce sont les mêmes que dans la méthode de Ward. L'interprétation des clusters est encore une fois la même.  
+
+Pour rappel, voici les individus carcatéristiques des clusters en terme de $R^2$.
+
+\vspace{0,2cm}
+
+```{r}
+kable(round(train_cl_sans_dep[c(32,28,18),],digits=4))
+```
+
+\newpage
+
+# V. Cartographie des des différentes méthodes de clustering dans la population globale
+
+J'effectue une carte descriptive  avec le nombre de clusters définis par chacun des algorithmes :
+3 clusters définis par l'algorithme EM, 5 pour K-means et 4 pour Ward
+
+\vspace{0,2cm}
+
+```{r}
+classification=matrix(factor(1:96),nrow=96,ncol=4)
+classification[,1]=c(paste(0,c(1,3:9),sep=""),10:29,"2A","2B",30:95)
+classification[,2:4]=
+  c(res.train_cl.em_best$classification,kmeans_res.train_cl.pp_5$cluster,les_clusters_ward(4)$clusters_ward)
+classification=as.data.frame(classification)
+names(classification)=c("Dep","EM","KMeans","Ward")
+```
+
+\vspace{0,2cm}
+
+```{r,message = F}
+library(GADMTools)
+France <- gadm_sf_loadCountries("FRA", level=2 )
+train_cl_full3=train_cl_full2 %>% 
+  left_join(classification)
+train_cl_full3$EM=as.numeric(train_cl_full3$EM)
+train_cl_full3$KMeans=as.numeric(train_cl_full3$KMeans)
+train_cl_full3$Ward=as.numeric(train_cl_full3$Ward)
+mydata_full=as.data.frame(train_cl_full3)
+```
+
+\vspace{0,2cm}
+
+```{r,message=FALSE,warning=FALSE}
+    France_par_salaire_em=choropleth(France, 
+               data = mydata_full, 
+               step=3,
+               value = "EM", 
+               adm.join = "NAME_2",
+               breaks = "quantile", 
+               palette = "Blues",
+               legend="Clusters EM",
+               title="représentation des départements selon les clusters EM") 
+ France_par_salaire_em
+```
+
+\newpage
+
+```{r,out.width="340px",warning=FALSE}
+France_par_salaire_KMeans=choropleth(France, 
+               data = mydata_full, 
+               step=5,
+               value = "KMeans", 
+               adm.join = "NAME_2",
+               breaks = "quantile", 
+               palette = "Blues",
+               legend="Clusters KMeans",
+               title="représentation des départements selon les clusters Kmeans") 
+ France_par_salaire_KMeans
+```
+
+\vspace{0,2cm}
+
+```{r,out.width="340px",warning=FALSE}
+France_par_salaire_Ward=choropleth(France, 
+               data = mydata_full, 
+               step=4,
+               value = "Ward", 
+               adm.join = "NAME_2",
+               breaks = "quantile", 
+               palette = "Blues",
+               legend="Clusters Ward",
+               title="représentation des départements selon les clusters Ward")
+France_par_salaire_Ward
+```
+
+
+\vspace{0,2cm}
+
+Dans l'ensemble, on retrouve un nombre important de similitudes de la carte du "Nombre d'individus par quantile" dans la carte de Ward. Par exemple, l'Ile-de-France privée de la Seine-et-Marne est un cluster à elle tout seule.  cela reste cohérent avec les covariables les plus discriminantes sélectionnées par l'ANOVA.   
+La carte K-means, avec beaucoup de covariables discriminantes dont le taux de femmes présente des similitudes avec la carte du "taux de femmes par quantile".
+
+\newpage
+
+# VI. Étude de la population active
+
+\vspace{0,2cm}
+
+## A. Introduction
+
+\vspace{0,2cm}
+
+Je vais désormais m'attacher à étudier les différents clusterings associés à la population globale.  
+Les principaux critères d'analyse, ainsi que l'architecture de présentation sont amplement détaillés dans l'étude de la population globale.  
+Je propose donc de présenter et commenter succintement les résultats que j'estime les plus importants ou significatifs.
+
+\vspace{0,2cm}
+
+## B. Clustering
+
+\vspace{0,2cm}
+
+```{r, warning=F}
+train_cl_sans_dep_actif=train_cl_actif %>% 
+  dplyr::select(-Dep) %>% scale
+#kable(head(round(train_cl_sans_dep_actif,digits=4)))
+```
+
+je délaisse la CAH qui comme précédemment décompose relativement mal les classes.
+
+\vspace{0,2cm}
+
+### 1. Méthode de Ward
+
+\vspace{0,2cm}
 
 ```{r, message=F}
-
+dend_cl_ward_actif <- hclust(dist(train_cl_sans_dep_actif, method="euclidean"), method="ward")
+par(mfrow=c(1,2))
+plot(dend_cl_ward_actif$height, type="b")
+inertie <- sort(dend_cl_ward_actif$height, decreasing = TRUE)
+plot(inertie[1:20], type = "s", xlab = "Nombre de classes", ylab = "Inertie")
+points(c(2, 4, 6, 9), inertie[c(2, 4, 6, 9)], col = c("black","green3", "red3", "blue3"), cex = 1.5, lwd = 2)
 ```
 
+\vspace{0,2cm}
 
-```{r, message=F}
+La méthode de Ward propose raisonablement 4 ou 6 clusters avec un clustering toujours aussi équilibré.
 
+\vspace{0,3cm}
+
+```{r,out.width="270px",warning=FALSE}
+plot(color_branches(as.dendrogram(dend_cl_ward_actif), 
+clusters=cutree(dend_cl_ward_actif,4,order_clusters_as_data = F),col=1:4), leaflab = "none", yaxt="none")
+#table(cutree(dend_cl_ward_actif,4,order_clusters_as_data = F))
 ```
 
+\newpage
 
+### 2. Méthode de Kmeans
 
+\vspace{0,2cm}
 
-
-
-
-
-----------------------------------------------------------------------------------------------------------
-
-```{r, message=F}
-train_cl_actif_sans_dep=train_cl_actif %>% 
-  dplyr::select(-Dep)
-
-dend_cl_actif <- hclust(dist(train_cl_sans_dep, method="euclidean"), method="ward")
-plot(dend_cl_actif)
-plot(dend_cl_actif$height, type="b")
-
-###########################################################################
-clusters_actif <- cutree(dend_cl_actif, 9 ,order_clusters_as_data = F)
-summary(as.factor(clusters_actif))
-dend_cl_actif_col<- color_branches(as.dendrogram(dend_cl_actif), clusters=clusters_actif,
-                       col=1:9)
-plot(dend_cl_actif_col, leaflab = "none", yaxt="none")
-```
-
-
-
-# IV. Clustering mixte (k-means + classification hiérarchique)
-
-
-## B. Premiers essais
+Observons les résultats fournis par les indicateurs de sélection du nombre optimal de cluster pour le kmeans.
 
 \vspace{0,2cm}
 
 ```{r}
-library("FactoMineR")
-library("factoextra")
+kmeans.res.indices <- matrix(0, nrow=15, ncol=3)
+for (i in 1:15)
+{
+  #K-means
+  kmeans.res<-LICORS::kmeanspp(data=train_cl_sans_dep_actif, k = i, 
+                         start = "random")
+  # calcul de la silhouette de chaque observation
+  s.data.set <- silhouette(kmeans.res$cluster, dist(train_cl_sans_dep_actif, method="euclidean"))
+  # % de variance expliquée
+  kmeans.res.indices[i,1] <- kmeans.res$betweenss/kmeans.res$totss
+  # calcul de la silhouette moyenne
+  kmeans.res.indices[i,2] <- (kmeans.res$betweenss/(i-1))/(kmeans.res$tot.withinss/(dim(train_cl_sans_dep_actif)[1]-i))
+  if (is.null(dim(s.data.set))==T)
+    kmeans.res.indices[i,3] <- NA
+  else
+    kmeans.res.indices[i,3] <- mean(s.data.set[,3])
+}
+kmeans.res.indices <- as.data.frame(kmeans.res.indices)
+```
 
+\vspace{0,2cm}
+
+```{r,out.width="400px",warning=FALSE}
+plotList <- list(ggplot(data=kmeans.res.indices, aes(x=1:15, y=kmeans.res.indices[,1])) + 
+                   geom_bar(stat="identity", fill="steelblue") +
+      geom_text(aes(label=round(kmeans.res.indices[,1],2)), vjust=1.6, color="white", size=3.5)+
+                   labs(y="Explained variance variance") +
+                   scale_x_continuous(breaks=1:15) + theme_bw(),
+                 ggplot(data=kmeans.res.indices, aes(x=1:15, y=kmeans.res.indices[,2])) + 
+                   geom_bar(stat="identity", fill="steelblue") +
+                   geom_text(aes(label=round(kmeans.res.indices[,2],2)), vjust=1.6, color="white", size=3.5)+
+                   labs(y="Calinski-Harabasz Index") +
+                   scale_x_continuous(breaks=1:15) + theme_bw(),
+                 ggplot(data=kmeans.res.indices, aes(x=1:15, y=kmeans.res.indices[,3])) + 
+                   geom_bar(stat="identity", fill="steelblue") +
+                   geom_text(aes(label=round(kmeans.res.indices[,3],2)), vjust=1.6, color="white", size=3.5)+
+                   labs(y="Average silhouette") +
+                   scale_x_continuous(breaks=1:15) + theme_bw())
+
+pm <- ggmatrix(
+  plotList, nrow=3, ncol=1, showXAxisPlotLabels = F, showYAxisPlotLabels =F ) + theme_bw()
+pm
+```
+
+\vspace{0,2cm}
+
+Là encore, les indicateurs ne sont pas du tout d'accord
+
+Il semblerait que 9 clusters fournissent une bonne valeur pour le pourcentage de variance expliquée :
+ * 2 pour les indices silhouette
+ * l'indice de Calinski-Harabasz propose, quant à lui, 2 ou 3 clusters  
+ 
+Notons qu'à partir de 4 clusters, le dernier indice ne varie quasi plus.
+
+Afin "d'équilibrer un peu les indicateurs", j'effectue un k-means avec 4 clusters et une initialisation aléatoire.
+
+\vspace{0,2cm}
+
+```{r}
+set.seed(222)
+kmeans_res.train_cl.pp_4_actif <- LICORS::kmeanspp(data=train_cl_sans_dep_actif, k = 4, 
+                         start = "random", iter.max = 100, nstart = 1)
 ```
 
 ```{r}
-#FAMD(train_full[sample(1:100000,40),], ncp = 5, sup.var = NULL, ind = NULL, graph = TRUE)
+#kmeans_res.train_cl.pp_4_actif
+kmeans_res.train_cl.pp_4_actif$size
+kmeans_res.train_cl.pp_4_actif$centers
+kmeans_res.train_cl.pp_4_actif$cluster
 ```
 
+\newpage
 
+### 3. Algorithme EM
 
 \vspace{0,2cm}
-```{r}
 
+```{r,message=FALSE,warning=FALSE}
+# T1<-Sys.time()
+res.train_cl.em_actif <- Mclust(train_cl_sans_dep_actif, G=2:12, verbose = T)
+# T2<-Sys.time()
+# T2-T1
 ```
+
 \vspace{0,2cm}
 
+```{r,out.width="300px",warning=FALSE}
+#summary(res.train_cl.em_actif$BIC)
+plot(res.train_cl.em_actif$BIC)
+```
+
+\vspace{0,2cm}
+
+Selon le critère de pénalisation BIC, les 3 modèles les plus performants sont :
+
+ * VVV (ellipsoidal, varying volume, shape, and orientation) à 2 clusters 
+ * VVE (ellipsoidal, equal orientation) et VEV (ellipsoidal, equal shape) à 3 clusters 
+
+Je choisis le modèle avec un type de variance VVE à 3 clusters.
 
 \vspace{0,2cm}
 
 ```{r,message=FALSE}
-
+res.train_cl.em_actif_best <- Mclust(train_cl_sans_dep_actif, G=3,modelNames="VVE",verbose = T)
 ```
+
 \vspace{0,2cm}
+
+```{r,message=FALSE}
+#res.train_cl.em_best
+classif_em_actif=as.numeric(res.train_cl.em_actif_best$classification)
+# classif_em_actif
+# table(classif_em_actif)
+```
+
+\vspace{0,2cm}
+
+## C. Analyse de la variance
+
+\vspace{0,2cm}
+
 ```{r}
+#summary(aov(cutree(dend_cl_ward_actif,6)~.,data=as.data.frame(train_cl_sans_dep_actif)))
+train_cl_actif.aov_kmeans=aov(kmeans_res.train_cl.pp_4_actif$cluster~.,data=as.data.frame(train_cl_sans_dep_actif))
+#summary(train_cl_actif.aov_kmeans)
+
+train_cl_actif.aov_em=aov(classif_em_actif~.,data=as.data.frame(train_cl_sans_dep_actif))
+#summary(train_cl_actif.aov_em)
+```
+
+\vspace{0,2cm}
+
+Voici les résultats des différentes ANOVA effectuées selon les clustering
+
+\vspace{0,2cm}
+
+|               |      Ward     |     K-Means     |    EM 
+| --------------|---------------|-----------------|--------------
+| nb_habitants  | 6.16e-09 ***  |  0.02452 *      |1.42e-08 ***
+| nb_individus  | 0.13560       |  0.00314 **     | 0.1833 
+| années_étude  | 0.44391       |  0.00362 **     | 0.3455 
+| salaire_moyen | 0.64698       |  0.00116 **     | 0.5790 
+| taux_femmes   | 0.67261       |  2e-16   ***    | 0.7036  
+| age_moyen     | 0.00217 **    |  0.00415 **     | 0.2961 
+| nb_villes     | 0.16997       |  0.00624 **     | 0.0062 **
+
+\vspace{0,2cm}
+
+ * avec la méthode de Ward, seuls le nombre d'habitants et l'âge moyen s'avèrent être des covariables discriminantes pour une classification à 4 clusters  
+ * avec la méthode de K-Means, toutes les covariables du dataset sont discriminantes pour une classification à 4 clusters  également ! 
+ * enfin, les variables discriminantes fournies par l'algorithme EM sont les mêmes que celles fournies par la méthode de Ward.
+
+\newpage
+  
+## D. ACP pour les actifs
+
+### 1. Pourcentage de variance expliquée.
+
+\vspace{0,2cm}
+
+```{r,fig.width=9, fig.height=4.5}
+par(mfrow=c(1,2))
+# réalisation de l'ACP
+res.pca_actif = PCA(train_cl_sans_dep_actif,graph=FALSE)
+
+#valeurs propres et composantes
+kable(res.pca_actif$eig)
+barplot(res.pca_actif$eig[,1])
+
+#critère du coude
+plot(1:7,res.pca_actif$eig[1:7],pch=1, type="o", xlab="n° de la valeur propre", ylab="valeur de la valeur propre")
+x.coude=c(1,4,7)
+y.coude=c(res.pca_actif$eig[1],res.pca_actif$eig[4],res.pca_actif$eig[7])
+points(x.coude,y.coude, type="l",col="red",lty=2)
+```
+
+\vspace{0,2cm}
+
+La structure est un peu différente de celle observée pour la population globale.  
+Les 2 premiers axes explique 65 % de la variance. La règle du coude m'enclinerait à choisir 4 axes où cette fois 92 % de la variance est expliquée.
+
+\vspace{0,2cm}
+
+### 2. Description des axes selon les individus
+
+\vspace{0,2cm}
+
+Le point de départ est le clustering de chacun des modèles étudiés. Les graphiques suivants représent respectivement :
+la méthode de Ward, puis K_Means avec 4 clusters, enfin la méthode EM avec 3 clusters.
+
+\vspace{0,2cm}
+
+```{r}
+clusters_pca_ward_actif=as.data.frame(cbind(cutree(dend_cl_ward_actif,4),train_cl_sans_dep_actif))
+colnames(clusters_pca_ward_actif)[1]="Cluster"
+clusters_pca_ward_actif$Cluster=factor(clusters_pca_ward_actif$Cluster,levels=1:4)
+
+clusters_pca_kmeans_actif=as.data.frame(cbind(kmeans_res.train_cl.pp_4_actif$cluster,train_cl_sans_dep_actif))
+colnames(clusters_pca_kmeans_actif)[1]="Cluster"
+clusters_pca_kmeans_actif$Cluster=factor(clusters_pca_kmeans_actif$Cluster,levels=1:4)
+
+clusters_pca_em_actif=as.data.frame(cbind(classif_em_actif,train_cl_sans_dep_actif))
+colnames(clusters_pca_em_actif)[1]="Cluster"
+clusters_pca_em_actif$Cluster=factor(clusters_pca_em_actif$Cluster,levels=1:3)
 ```
 
 
+```{r}
+#par(mfrow=c(1,3))
+res.pca1 = PCA(clusters_pca_ward_actif,ncp=4,quali.sup=1,graph=FALSE)
+plot(res.pca1,habillage=1,col.hab=c("blue","purple","red","green"),choix="ind")
+```
+
+```{r}
+res.pca2 = PCA(clusters_pca_kmeans_actif,ncp=4,quali.sup=1,graph=FALSE)
+plot(res.pca2,habillage=1,col.hab=c("blue","purple","red","green"),choix="ind")
+```
+
+\newpage
+
+```{r}
+res.pca3 = PCA(clusters_pca_em_actif,ncp=3,quali.sup=1,graph=FALSE)
+plot(res.pca3,habillage=1,col.hab=c("blue","purple","red"),choix="ind")
+```
+
+\vspace{0,2cm}
+
+Avec la **méthode Ward**, l'axe 1 semble opposer les individus de la classe 4 (positivement corrélés avec cet axe) avec ceux des classes 2 et 3 (négativement corrélés).  
+L'axe 2, lui, est difficilement interprétable.
+
+Avec la **méthode Kmeans**, l'axe 1 semble opposer les individus de la classe 1 et 3 (positivement corrélés avec cet axe) avec ceux (négativement corrélés) des classes 2 et 4 dans une certaine mesure.  
+L'axe 2 oppose principalement les individus des classes 1 et 3.  
+
+Avec la **méthode EM**, l'axe 1 semble opposer les individus de la classe 1 et 3 (positivement corrélés avec cet axe) avec ceux (négativement corrélés) de la classe 2.  
+Sur l'axe 2, tous les individus de la classe ont des valeurs inférieures à la moyenne.
+
+\vspace{0,2cm}
+
+Le 1er axe de l'ACP présenté sur chaque graphique met en évidence des classes assez différentes même avec le même nombre de clusters (cf. Ward contre Kmeans). Par exmple, les départements 77 et 92 sont dans le même cluster avec Ward, contrairement à Kmeans.
+De même, la répartition EM avec son nombre de classes inférieur ne regroupe pas 2 classes en une nouvelle, mais à plutôt tendnace à casse les 2 structures précédentes en créant sa propre agrégation.
+
+\newpage
+
+J'étudie les points possédant une contribution maximale sur chacun des axes sélectionnés en terme de $cos^2$ et non significative sur les autres. 
+
+\vspace{0,2cm}
+
+```{r}
+# Points à forte contribution sur les axes
+kable(pts_max(res.pca1,4))
+#kable(pts_max(res.pca2,4))
+#kable(pts_max(res.pca3,3))
+```
+
+\vspace{0,2cm}
+
+Voici les individus sélectionnés selon les clusters allant de 1 à 4
+
+\vspace{0,2cm}
+
+```{r}
+kable(round(train_cl_sans_dep_actif[c(32,43,44,5),],digits=4))
+```
+
+\vspace{0,2cm}
+
+L'ACP apporte leséléments d'interprétation suivants. 
+
+Il semble que :  
+
+ * tout comme pour la population globale, le cluster 1 possède la même interprétation. Il caractérise les départements denses en nombre de villes, en nombre d'habitants avec une population plutôt jeune (bien en-dessous de la moyenne). Ces individus ont un un taux de femmes, un salaire et un niveau d'étude au-dessus de la moyenne ()
+  * le cluster 2,3 sont plus délicats à interpréter car les individus choisis possèdent entre 23 et 35 % de leur $R^2$ sur les autres axes. Néanmoins, ils sont clairement opposés (par rapport à la moyenne) sur l'ensemble des covariables excepté le taux de femmes. Ainsi, le cluster 2 pourrait représenter les départements modérément peuplés plutôt "féminins",  "plus jeunes" et dont les individus ont un salaire et un niveau d'étude en-dessous de la moyenne.
+  Encore plus féminin, le cluster 3 pourrait représenter son opposé sur les autres indicateurs.
+  * le cluster 4 semble caracteriser les départements "très jeunes extrêmement féminins" possédant un salire_moyen assez faible.
+
+\vspace{0,2cm}
+  
+```{r}
+cor(train_cl_sans_dep_actif[,4],train_cl_sans_dep_actif[,5])
+```
+
+\vspace{0,2cm}
+
+Le correlation entre le salaire moyen et le taux de femmes dans le dpératment de la population active est quasi-nul, laissant peut-être entendre que la tendance présente dans le cluster 4 n'est pas systématique...
+
+\newpage
+
+# VII. Cartographie des des différentes méthodes de clustering dans la population active
+
+J'effectue une carte descriptive  avec le nombre de clusters définis par chacun des algorithmes :
+3 clusters définis par l'algorithme EM, 4 pour K-means et Ward
+
+\vspace{0,2cm}
+
+```{r}
+classification_actif=matrix(factor(1:96),nrow=96,ncol=4)
+classification_actif[,1]=c(paste(0,c(1,3:9),sep=""),10:29,"2A","2B",30:95)
+classification_actif[,2:4]=
+  c(classif_em_actif,kmeans_res.train_cl.pp_4_actif$cluster,cutree(dend_cl_ward_actif,4))
+classification_actif=as.data.frame(classification_actif)
+names(classification_actif)=c("Dep","EM","KMeans","Ward")
+classification_actif
+```
+
+\vspace{0,2cm}
+
+```{r,message = F}
+library(GADMTools)
+France <- gadm_sf_loadCountries("FRA", level=2 )
+train_cl_actif3=train_cl_actif2 %>% 
+  left_join(classification_actif)
+train_cl_actif3
+train_cl_actif3$EM=as.numeric(train_cl_actif3$EM)
+train_cl_actif3$KMeans=as.numeric(train_cl_actif3$KMeans)
+train_cl_actif3$Ward=as.numeric(train_cl_actif3$Ward)
+mydata_actif=as.data.frame(train_cl_actif3)
+```
 
 \vspace{0,2cm}
 
 ```{r,message=FALSE}
-
+    France_par_salaire_em=choropleth(France, 
+               data = mydata_actif, 
+               step=3,
+               value = "EM", 
+               adm.join = "NAME_2",
+               breaks = "quantile", 
+               palette = "Blues",
+               legend="Clusters EM",
+               title="représentation des départements selon les clusters EM") 
+ France_par_salaire_em
 ```
 
-
 \vspace{0,2cm}
-```{r,message=FALSE}
 
+```{r,message=FALSE,warning=FALSE}
+France_par_salaire_KMeans=choropleth(France, 
+               data = mydata_actif, 
+               step=4,
+               value = "KMeans", 
+               adm.join = "NAME_2",
+               breaks = "quantile", 
+               palette = "Blues",
+               legend="Clusters KMeans",
+               title="représentation des départements selon les clusters Kmeans") 
+ France_par_salaire_KMeans
 ```
 
+\vspace{0,2cm}
+
+```{r,message=FALSE,warning=FALSE}
+France_par_salaire_Ward=choropleth(France, 
+               data = mydata_actif, 
+               step=4,
+               value = "Ward", 
+               adm.join = "NAME_2",
+               breaks = "quantile", 
+               palette = "Blues",
+               legend="Clusters Ward",
+               title="représentation des départements selon les clusters Ward")
+France_par_salaire_Ward
+```
 
 \vspace{0,2cm}
+
+Dans l'ensemble, on retrouve un nombre important de similitude de la carte du "Nombre d'individus par quantile" dans les cartes EM et Ward, cela reste cohérent avec les covariables les plus discriminantes sélectionnées par l'ANOVA.   
+La carte K-means, avec toutes ses covariables discriminantes s'avère moins aisée à interpréter.
+
